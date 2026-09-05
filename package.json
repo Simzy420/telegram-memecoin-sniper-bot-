@@ -1,0 +1,17 @@
+{
+  "name": "memecoin-sniper",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev:bot": "npm run dev -w @snipr/bot",
+    "dev:web": "npm run dev -w @snipr/web",
+    "build": "npm run build -w @snipr/shared && npm run build -w @snipr/bot && npm run build -w @snipr/web",
+    "typecheck": "npm run typecheck -w @snipr/shared && npm run typecheck -w @snipr/bot"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,66 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Snipr";
+const botLink = import.meta.env.PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/";
+---
+<BaseLayout title={`${botName} — Autonomous memecoin agent`}>
+  <section class="hero">
+    <h1>{botName}</h1>
+    <p>
+      Four taps. Wallet inside Telegram. Fund once. The agent takes the night shift on memecoins.
+    </p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href={botLink}>Open in Telegram</a>
+      <a class="btn btn-ghost" href="/docs">Read the docs</a>
+    </div>
+  </section>
+
+  <section class="section">
+    <h2>Four buttons. Done.</h2>
+    <p class="lead">No signup. No exchange API key. No charts to babysit.</p>
+    <ol class="steps">
+      <li>
+        <span class="step-num">1</span>
+        <div>
+          <strong>Start</strong>
+          <p>Open the bot on Telegram and tap Start.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">2</span>
+        <div>
+          <strong>Generate wallet</strong>
+          <p>Create EVM + Solana addresses in-chat. Export your keys anytime.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">3</span>
+        <div>
+          <strong>Fund ≥ $100</strong>
+          <p>Deposit with one of six networks. Balances update in the bot.</p>
+        </div>
+      </li>
+      <li>
+        <span class="step-num">4</span>
+        <div>
+          <strong>Activate</strong>
+          <p>Arm the agent. Trailing take-profit and stop-loss ship in Phase 2.</p>
+        </div>
+      </li>
+    </ol>
+  </section>
+
+  <section class="section">
+    <h2>Fund with</h2>
+    <p class="lead">One EVM address covers five chains. Solana uses its own address.</p>
+    <ul class="chains">
+      <li>Base (ETH)</li>
+      <li>Ethereum (ETH)</li>
+      <li>Binance (BNB)</li>
+      <li>Monad (MON)</li>
+      <li>Robinhood (ETH)</li>
+      <li>Solana (SOL)</li>
+    </ul>
+  </section>
+</BaseLayout>
