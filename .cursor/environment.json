@@ -1,0 +1,10 @@
+{
+  "name": "telegram-memecoin-sniper-bot",
+  "install": "npm ci",
+  "terminals": [
+    {
+      "name": "bot",
+      "command": "npm run dev"
+    }
+  ]
+}
