@@ -1,0 +1,103 @@
+---
+import BaseLayout from "../layouts/BaseLayout.astro";
+
+const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Snipr";
+const minFund = import.meta.env.PUBLIC_MIN_FUND_USD ?? "100";
+---
+<BaseLayout title={`Docs — ${botName}`} description={`How to use ${botName}.`}>
+  <div class="docs-layout">
+    <aside class="docs-nav">
+      <a href="#overview">Overview</a>
+      <a href="#howto">How to start</a>
+      <a href="#networks">Networks</a>
+      <a href="#wallet">Wallet &amp; keys</a>
+      <a href="#activate">Activate</a>
+      <a href="#phase2">What comes next</a>
+      <a href="#fees">Fees</a>
+      <a href="#risks">Risks</a>
+      <a href="#faq">FAQ</a>
+    </aside>
+
+    <article class="prose">
+      <h1>Docs</h1>
+      <p>
+        {botName} is a Telegram-native memecoin agent. Phase 1 covers wallet, funding, and activate.
+        Automated snipes with dynamic stop-loss and trailing take-profit arrive in Phase 2.
+      </p>
+
+      <h2 id="overview">Overview</h2>
+      <p>
+        There is no separate signup. Your Telegram account is your identity. The bot generates
+        deposit addresses, tracks portfolio value, and unlocks Activate at ${minFund} USD.
+      </p>
+
+      <h2 id="howto">How to start</h2>
+      <ol>
+        <li>Open the bot in Telegram and tap <strong>Start</strong>.</li>
+        <li>Tap <strong>Generate New Wallet</strong>.</li>
+        <li>Copy your EVM and SOL addresses (or use Deposit).</li>
+        <li>Send funds until Total ≥ ${minFund}.</li>
+        <li>Tap <strong>Activate Bot</strong>.</li>
+      </ol>
+
+      <h2 id="networks">Supported funding networks</h2>
+      <ul>
+        <li><strong>Base</strong> — ETH</li>
+        <li><strong>Ethereum</strong> — ETH</li>
+        <li><strong>Binance</strong> — BNB</li>
+        <li><strong>Monad</strong> — MON</li>
+        <li><strong>Robinhood</strong> — ETH</li>
+        <li><strong>Solana</strong> — SOL</li>
+      </ul>
+      <p>
+        The five EVM networks share one address. Solana has a separate address. Only send the
+        matching asset on the matching network.
+      </p>
+
+      <h2 id="wallet">Wallet &amp; keys</h2>
+      <p>
+        Keys are generated for you and stored encrypted on the server. Use
+        <strong>Export Private Key</strong> to back them up. Anyone with the keys controls the funds.
+      </p>
+      <p>
+        <strong>Import a Wallet</strong> and <strong>Transfer</strong> are stubbed in Phase 1 and
+        will be completed before public launch of trading.
+      </p>
+
+      <h2 id="activate">Activate</h2>
+      <p>
+        When portfolio USD value reaches ${minFund}, Activate becomes available. Phase 1 marks your
+        agent as armed. No live trades execute until Phase 2.
+      </p>
+
+      <h2 id="phase2">What comes next</h2>
+      <ul>
+        <li>Memecoin opportunity detection on selected DEXes</li>
+        <li>Automatic entries from your funded wallet</li>
+        <li>Dynamic stop-loss</li>
+        <li>Trailing take-profit that ratchets as price runs</li>
+        <li>Telegram notifications on fills</li>
+      </ul>
+
+      <h2 id="fees">Fees</h2>
+      <p>
+        Launch messaging includes a new-user promo window (default 48 hours, 0% fees). Exact fee
+        schedule will be published before Phase 2 trading goes live.
+      </p>
+
+      <h2 id="risks">Risks</h2>
+      <ul>
+        <li>Memecoins can go to zero quickly.</li>
+        <li>Smart contract, RPC, and bot bugs can cause loss of funds.</li>
+        <li>Server-held encrypted keys are a custody risk — export and self-custody if unsure.</li>
+        <li>Past marketing claims are not guarantees of profit.</li>
+      </ul>
+
+      <h2 id="faq">FAQ</h2>
+      <p><strong>Do I need an exchange API key?</strong><br />No.</p>
+      <p><strong>Is there a subscription?</strong><br />No subscription in the planned model.</p>
+      <p><strong>Can I withdraw?</strong><br />Yes — Transfer ships fully in Phase 2; you can also export keys and move funds yourself.</p>
+      <p><strong>Why is the product name Snipr?</strong><br />Placeholder until the final name is chosen.</p>
+    </article>
+  </div>
+</BaseLayout>

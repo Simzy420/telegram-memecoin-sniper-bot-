@@ -1,23 +1,7 @@
-# Environment
+node_modules
+dist
 .env
-*.key
-*.pem
-
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-dist/
-build/
-.eggs/
-
-# Database
-*.db
-*.sqlite
-
-# Logs
+.DS_Store
+.astro
+apps/web/dist
 *.log
-
-# IDE
-.vscode/
-.idea/

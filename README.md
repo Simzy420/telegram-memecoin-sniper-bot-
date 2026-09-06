@@ -1,45 +1,50 @@
-# 🦍 Big Brain Ape — Telegram Memecoin Sniper Bot
+# Snipr (placeholder name)
 
-Trades memecoins. Users hire this bot to automatically snipe and trade new memecoin launches on Solana and Base.
+Telegram memecoin agent — Phase 1 scaffold.
 
-## 🚀 Features
+> **Product name TBD.** Set `BOT_NAME` in `.env`.  
+> **This repo is separate from Big-Brain-Ape.**
 
-- **Auto-snipe new launches** — Detects new token launches on Pump.fun, Raydium, and Uniswap in real-time
-- **Rug pull protection** — Multi-layer safety checks before every buy (liquidity, honeypot, creator analysis)
-- **Telegram interface** — Users control everything from a Telegram chat
-- **Subscription model** — Users pay to hire the bot (Free trial, Basic, Pro, Whale tiers)
-- **Non-custodial option** — Users can connect their own wallet
-- **Real-time notifications** — Trade alerts, new token alerts, safety warnings
-- **Performance analytics** — Win rate, P&L, trade history
+## Phase 1
 
-## 🏗️ Architecture
+Four-tap user flow:
+
+1. Start bot  
+2. Generate wallet  
+3. Fund ≥ $100 (Base / Ethereum / Binance / Monad / Robinhood / Solana)  
+4. Activate bot  
+
+Trading engine (memecoin snipes + trailing take-profit) is **Phase 2**.
+
+## Docs
+
+- [FIRST_DRAFT.md](./FIRST_DRAFT.md) — architecture and scope  
+- [WHAT_I_NEED_FROM_YOU.md](./WHAT_I_NEED_FROM_YOU.md) — checklist of inputs you provide  
+
+## Structure
 
 ```
-src/
-├── detectors/     # New token launch detection (Pump.fun, Raydium, Uniswap)
-├── safety/        # Rug pull detection, honeypot checks, token analysis
-├── trading/       # Trade execution, wallet management, stop-loss
-├── bot/           # Telegram bot interface, commands, notifications
-├── billing/       # Subscription management, payments, access control
-├── analytics/     # Performance tracking, stats
-├── models/        # Data models (User, Token, Trade, Position)
-├── config.py      # Configuration
-└── utils/         # Shared utilities
+apps/bot     Telegram bot (grammY + TypeScript)
+apps/web     Landing + docs (Astro)
+packages/shared   Chain config + shared types
 ```
 
-## 📋 Development Tasks
-
-See the [GitHub Issues](https://github.com/Simzy420/telegram-memecoin-sniper-bot-/issues) for the full task breakdown.
-
-## 🔧 Setup
+## Quick start (local)
 
 ```bash
 cp .env.example .env
-# Edit .env with your keys
-pip install -r requirements.txt
-python main.py
+# fill TELEGRAM_BOT_TOKEN, WALLET_ENCRYPTION_KEY, DATABASE_URL
+
+docker compose up -d postgres   # optional local DB
+npm install
+npm run dev:bot
+npm run dev:web
 ```
 
-## ⚠️ Disclaimer
+## Scripts
 
-This software is for educational purposes. Memecoin trading is extremely high risk. Always do your own research.
+| Command | Purpose |
+|---------|---------|
+| `npm run dev:bot` | Run Telegram bot |
+| `npm run dev:web` | Run docs site |
+| `npm run build` | Build all packages |

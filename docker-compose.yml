@@ -1,0 +1,14 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: snipr
+      POSTGRES_PASSWORD: snipr
+      POSTGRES_DB: snipr
+    ports:
+      - "5432:5432"
+    volumes:
+      - snipr_pg:/var/lib/postgresql/data
+
+volumes:
+  snipr_pg:
