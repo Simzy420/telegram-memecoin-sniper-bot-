@@ -1,0 +1,30 @@
+# Core
+python-telegram-bot>=21.0
+aiohttp>=3.9
+asyncio-throttle>=1.0
+
+# Solana
+solana>=0.34.0
+solders>=0.21.0
+base58>=2.1
+
+# Base/Ethereum
+web3>=7.0
+
+# Database
+aiosqlite>=0.20
+redis>=5.0
+
+# APIs
+httpx>=0.27
+pydantic>=2.0
+
+# Safety/Analysis
+aiohttp>=3.9
+
+# Payments
+stripe>=9.0  # optional, for card payments
+
+# Utils
+python-dotenv>=1.0
+loguru>=0.7
