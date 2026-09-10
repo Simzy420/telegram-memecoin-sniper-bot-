@@ -6,7 +6,7 @@ interface Props {
   description?: string;
 }
 
-const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Snipr";
+const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Big Brain Ape";
 const { title = botName, description = "Autonomous memecoin agent on Telegram." } = Astro.props;
 ---
 <!doctype html>
@@ -16,12 +16,16 @@ const { title = botName, description = "Autonomous memecoin agent on Telegram." 
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
     <title>{title}</title>
+    <link rel="icon" type="image/jpeg" href="/mascot.jpg" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   </head>
   <body>
     <div class="wrap">
       <header class="site-header">
-        <a class="brand" href="/">{botName}</a>
+        <a class="brand" href="/">
+          <img class="brand-mark" src="/mascot.jpg" alt="" width="40" height="40" />
+          <span>{botName}</span>
+        </a>
         <nav class="nav">
           <a href="/docs">Docs</a>
           <a href="/docs#howto">How to start</a>

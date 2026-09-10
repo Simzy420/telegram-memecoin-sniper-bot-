@@ -1,19 +1,28 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 
-const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Snipr";
-const botLink = import.meta.env.PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/";
+const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Big Brain Ape";
+const botLink = import.meta.env.PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/Big_Brain_Ape_Bot";
 ---
 <BaseLayout title={`${botName} — Autonomous memecoin agent`}>
   <section class="hero">
-    <h1>{botName}</h1>
-    <p>
-      Four taps. Wallet inside Telegram. Fund once. The agent takes the night shift on memecoins.
-    </p>
-    <div class="cta-row">
-      <a class="btn btn-primary" href={botLink}>Open in Telegram</a>
-      <a class="btn btn-ghost" href="/docs">Read the docs</a>
+    <div class="hero-copy">
+      <h1>{botName}</h1>
+      <p>
+        Four taps. Wallet inside Telegram. Fund once. The agent takes the night shift on memecoins.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href={botLink}>Open in Telegram</a>
+        <a class="btn btn-ghost" href="/docs">Read the docs</a>
+      </div>
     </div>
+    <img
+      class="hero-mascot"
+      src="/mascot.jpg"
+      alt={`${botName} mascot`}
+      width="560"
+      height="749"
+    />
   </section>
 
   <section class="section">

@@ -67,15 +67,31 @@ a {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
   padding: 1.25rem 0;
 }
 
 .brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.7rem;
   font-family: var(--font-display);
   font-size: 1.35rem;
   letter-spacing: -0.03em;
   text-decoration: none;
   color: var(--ink);
+}
+
+.brand-mark {
+  width: 2.5rem;
+  height: 2.5rem;
+  object-fit: cover;
+  object-position: center 12%;
+  border-radius: 0.35rem;
+  border: 1px solid var(--ink);
+  background: #0c0c0c;
+  flex-shrink: 0;
 }
 
 .nav {
@@ -96,6 +112,35 @@ a {
 .hero {
   padding: 4.5rem 0 5rem;
   animation: rise 0.8s ease-out both;
+  display: grid;
+  gap: 2.5rem;
+  align-items: center;
+}
+
+@media (min-width: 800px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr) minmax(14rem, 20rem);
+    gap: 3rem;
+  }
+}
+
+.hero-mascot {
+  width: min(100%, 16rem);
+  justify-self: center;
+  border-radius: 0.35rem;
+  border: 1px solid var(--ink);
+  background: #0c0c0c;
+  display: block;
+  aspect-ratio: 3 / 4;
+  object-fit: cover;
+  object-position: center top;
+}
+
+@media (min-width: 800px) {
+  .hero-mascot {
+    width: 100%;
+    max-width: none;
+  }
 }
 
 .hero h1 {
@@ -104,7 +149,7 @@ a {
   line-height: 0.95;
   letter-spacing: -0.04em;
   margin: 0 0 1rem;
-  max-width: 12ch;
+  max-width: 11ch;
 }
 
 .hero p {
