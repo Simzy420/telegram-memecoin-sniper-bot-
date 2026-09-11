@@ -20,6 +20,7 @@ import {
   mainWalletKeyboard,
   startKeyboard,
 } from "./keyboards.js";
+import { startWelcomeCopy } from "./welcome.js";
 
 function promoLine(): string {
   if (!config.promoEnabled) return "";
@@ -75,21 +76,7 @@ async function ensureUser(ctx: Context): Promise<UserRow> {
 export function registerHandlers(bot: Bot): void {
   bot.command("start", async (ctx) => {
     const user = await ensureUser(ctx);
-    const welcome =
-      `*${config.botName}* — ${config.botTagline}\n\n` +
-      `🚀 Always-on agent for memecoin opportunities\n` +
-      `🛡 Continuous risk protection\n` +
-      `📈 Trailing profit locks (Phase 2)\n` +
-      `🔔 Real-time Telegram trade alerts (Phase 2)\n\n` +
-      `No subscription. No API key. Withdraw anytime.\n` +
-      (config.promoEnabled
-        ? `🎁 0% fees for new users during the first ${config.promoHours} hours.\n\n`
-        : "\n") +
-      `*4 steps:*\n` +
-      `1. Start (done)\n` +
-      `2. Generate wallet\n` +
-      `3. Fund ≥ $${config.minFundUsd}\n` +
-      `4. Activate\n`;
+    const welcome = startWelcomeCopy();
 
     const { totalUsd } = user.evm_address
       ? await loadPortfolio(user.evm_address, user.sol_address)

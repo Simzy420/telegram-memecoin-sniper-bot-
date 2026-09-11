@@ -176,10 +176,20 @@ async def cmd_start(message: Message, command: CommandObject) -> None:
     sub = await ctx.subscriptions.check_subscription(user_id)
 
     text = (
-        f"🦍 <b>Welcome to Big Brain Ape Sniper, {name}!</b>\n\n"
+        f"🦍 <b>Big Brain Ape The MemeCoin Sniper</b>\n"
+        f"Welcome, {name}. One chat. The head ape plus five specialists.\n\n"
+        f"<b>The troop</b>\n"
+        f"◎ <b>Sniper</b> — launches and fresh liquidity\n"
+        f"◈ <b>Scout</b> — smart money, KOL, narrative\n"
+        f"▣ <b>Guard</b> — rug screens and emergency exits\n"
+        f"⬡ <b>Arbiter</b> — cross-chain spreads\n"
+        f"⇢ <b>Router</b> — best fill across DEXes\n\n"
+        f"2% on winning trades only. The memecoin trading engine is "
+        f"<b>not live yet</b> — Phase 1 is wallet, fund, and activate.\n\n"
         f"You've been given a <b>3-day free trial</b> — 1 snipe/day, max 0.1 SOL.\n\n"
         f"📊 <b>Your tier:</b> {sub.tier.value.upper()}\n"
         f"⏳ <b>Trial expires in:</b> {sub.days_remaining} days\n\n"
+        f"<b>4 steps:</b> open the chat · fund the wallets · 1-click trading · profit while asleep\n\n"
         f"<b>Quick start:</b>\n"
         f"• /hire — View subscription tiers & upgrade\n"
         f"• /wallet — Set up your trading wallet\n"
