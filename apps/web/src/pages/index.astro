@@ -1,75 +1,282 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 
+const productName = "Big Brain Ape The MemeCoin Sniper";
 const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Big Brain Ape";
 const botLink = import.meta.env.PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/Big_Brain_Ape_Bot";
+const minFund = import.meta.env.PUBLIC_MIN_FUND_USD ?? "100";
+
+const specialists = [
+  {
+    mark: "◎",
+    name: "Sniper",
+    role: "Launches and fresh liquidity. First read when a pool appears.",
+  },
+  {
+    mark: "◈",
+    name: "Scout",
+    role: "Smart-money wallets, KOL flow, and narrative heat.",
+  },
+  {
+    mark: "▣",
+    name: "Guard",
+    role: "Rug screens and emergency exits. Four-check safety gate.",
+  },
+  {
+    mark: "⬡",
+    name: "Arbiter",
+    role: "Cross-chain spreads. Same story, better venue.",
+  },
+  {
+    mark: "⇢",
+    name: "Router",
+    role: "Best fill across DEXes. The last hand on the order.",
+  },
+];
 ---
-<BaseLayout title={`${botName} — Autonomous memecoin agent`}>
+<BaseLayout title={`${productName} — the head ape hunts while you sleep`}>
   <section class="hero">
     <div class="hero-copy">
-      <h1>{botName}</h1>
+      <p class="eyebrow">{productName}</p>
+      <h1>The head ape hunts while you sleep.</h1>
       <p>
-        Four taps. Wallet inside Telegram. Fund once. The agent takes the night shift on memecoins.
+        One Telegram chat. Five specialists. The boss picks who handles the tape.
+        No charts to babysit. No exchange API key.
+      </p>
+      <p class="hero-note">
+        Phase 1 is live for wallet, fund, and activate. The memecoin trading engine is not live yet.
       </p>
       <div class="cta-row">
         <a class="btn btn-primary" href={botLink}>Open in Telegram</a>
-        <a class="btn btn-ghost" href="/docs">Read the docs</a>
+        <a class="btn btn-ghost" href="#specialists">Meet the troop</a>
       </div>
     </div>
-    <img
-      class="hero-mascot"
-      src="/mascot.jpg"
-      alt={`${botName} mascot`}
-      width="560"
-      height="749"
-    />
+    <figure class="hero-scene">
+      <img
+        class="hero-mascot"
+        src="/mascot-hero-full.jpeg"
+        alt={`${productName} — head ape at the desk with the live tape behind him`}
+        width="1320"
+        height="778"
+      />
+    </figure>
   </section>
 
-  <section class="section">
-    <h2>Four buttons. Done.</h2>
-    <p class="lead">No signup. No exchange API key. No charts to babysit.</p>
-    <ol class="steps">
-      <li>
-        <span class="step-num">1</span>
-        <div>
-          <strong>Start</strong>
-          <p>Open the bot on Telegram and tap Start.</p>
-        </div>
+  <section class="section" id="how">
+    <p class="eyebrow">Four steps / then the troop takes over</p>
+    <h2>Open the chat. Fund once. Arm the desk.</h2>
+    <p class="lead">
+      Same four-tap path as a night-desk bot: start, wallet, deposit, deploy.
+      {botName} holds the keys story in-chat. You can export anytime.
+    </p>
+    <ol class="step-grid">
+      <li class="step-card">
+        <p class="step-kicker">01 / Open the chat</p>
+        <h3>Start the bot, get a wallet</h3>
+        <p>
+          Message <a href={botLink}>@Big_Brain_Ape_Bot</a> and tap Start.
+          Generate a fresh EVM + Solana wallet inside Telegram, or import later.
+        </p>
+        <ul>
+          <li>No app, no signup, no KYC</li>
+          <li>Export the raw keys anytime</li>
+          <li>Never share the keys</li>
+        </ul>
       </li>
-      <li>
-        <span class="step-num">2</span>
-        <div>
-          <strong>Generate wallet</strong>
-          <p>Create EVM + Solana addresses in-chat. Export your keys anytime.</p>
-        </div>
+      <li class="step-card">
+        <p class="step-kicker">02 / Fund the wallets</p>
+        <h3>Pick a chain, deposit, done</h3>
+        <p>
+          Six networks. One EVM address covers five chains. Solana uses its own address.
+          Unlock Activate at ${minFund}.
+        </p>
+        <ul>
+          <li>Base, Ethereum, BNB, Monad, Robinhood, Solana</li>
+          <li>No bridging toggle in Phase 1</li>
+          <li>Balance updates as the network confirms</li>
+        </ul>
       </li>
-      <li>
-        <span class="step-num">3</span>
-        <div>
-          <strong>Fund ≥ $100</strong>
-          <p>Deposit with one of six networks. Balances update in the bot.</p>
-        </div>
+      <li class="step-card">
+        <p class="step-kicker">03 / 1-click trading</p>
+        <h3>One tap and the desk is armed</h3>
+        <p>
+          Tap Activate / Deploy. Phase 1 marks the agent armed.
+          Phase 2 adds entries, live take-profit, and stop-loss.
+        </p>
+        <ul>
+          <li>One-tap deploy</li>
+          <li>Guard on every order (Phase 2)</li>
+          <li>Router picks the fill (Phase 2)</li>
+        </ul>
       </li>
-      <li>
-        <span class="step-num">4</span>
-        <div>
-          <strong>Activate</strong>
-          <p>Arm the agent. Trailing take-profit and stop-loss ship in Phase 2.</p>
-        </div>
+      <li class="step-card">
+        <p class="step-kicker">04 / Profit while asleep</p>
+        <h3>Guard watches. The boss closes.</h3>
+        <p>
+          Planned exits follow the tape, not a fixed ladder. Telegram pings on every move.
+          Fee is 2% on winning trades only — nothing on a quiet night.
+        </p>
+        <ul>
+          <li>Exits calibrated to live conditions</li>
+          <li>Guard can cut a rug pattern</li>
+          <li>2% on closed wins, planned for Phase 2</li>
+        </ul>
       </li>
     </ol>
   </section>
 
-  <section class="section">
-    <h2>Fund with</h2>
-    <p class="lead">One EVM address covers five chains. Solana uses its own address.</p>
+  <section class="section" id="specialists">
+    <p class="eyebrow">One chat · five specialists</p>
+    <h2>The troop reports to the head ape.</h2>
+    <p class="lead">
+      You talk to one bot. The boss assigns the tape: launches, flow, safety, spreads, routing.
+      Nobody else gets a trademark seat at this desk.
+    </p>
+    <div class="troop">
+      <article class="boss-card">
+        <img
+          src="/mascot-boss.jpg"
+          alt={`${botName} — head ape, the boss`}
+          width="1152"
+          height="1712"
+        />
+        <div class="boss-meta">
+          <p class="step-kicker">Boss / head ape</p>
+          <h3>{botName}</h3>
+          <p>Reads the room. Picks which specialist fires. You never leave Telegram.</p>
+        </div>
+      </article>
+      <ul class="specialists">
+        {specialists.map((s) => (
+          <li>
+            <strong><span>{s.mark}</span>{s.name}</strong>
+            <p>{s.role}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  </section>
+
+  <section class="section" id="numbers">
+    <p class="eyebrow">Live numbers · honest placeholders</p>
+    <h2>The desk is being wired. Counters stay at zero.</h2>
+    <p class="lead">
+      These are not simulated wins. Phase 1 does not execute memecoin trades yet.
+    </p>
+    <div class="stat-grid">
+      <div class="stat">
+        <b>0</b>
+        <small>Trades executed this week</small>
+      </div>
+      <div class="stat">
+        <b>0.0%</b>
+        <small>30-day win rate — not live</small>
+      </div>
+      <div class="stat">
+        <b>0 ms</b>
+        <small>Median route — engine not live</small>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="venues">
+    <p class="eyebrow">One bot · every venue that matters</p>
+    <h2>Six chains. One chat window.</h2>
+    <p class="lead">
+      Deposit on the chain you want to trade. Phase 2 routes fills; Phase 1 tracks the portfolio.
+    </p>
     <ul class="chains">
-      <li>Base (ETH)</li>
+      <li>Solana (SOL)</li>
       <li>Ethereum (ETH)</li>
       <li>Binance (BNB)</li>
+      <li>Base (ETH)</li>
       <li>Monad (MON)</li>
       <li>Robinhood (ETH)</li>
-      <li>Solana (SOL)</li>
     </ul>
+  </section>
+
+  <section class="section" id="faq">
+    <p class="eyebrow">No fine print</p>
+    <h2>Straight answers.</h2>
+    <div class="faq">
+      <details open>
+        <summary>What does {productName} actually do?</summary>
+        <p>
+          It is a Telegram-native memecoin desk. Phase 1: generate or import a wallet, fund
+          ≥ ${minFund}, activate. Phase 2: the head ape assigns Sniper, Scout, Guard, Arbiter,
+          or Router and the execution stack places the order.
+        </p>
+      </details>
+      <details>
+        <summary>Do you hold my keys?</summary>
+        <p>
+          Keys are generated in-bot and stored encrypted on the server so the agent can act.
+          Export anytime. If you want full self-custody, export and move funds yourself.
+          Import and Transfer are stubbed until Phase 2.
+        </p>
+      </details>
+      <details>
+        <summary>What is the fee?</summary>
+        <p>
+          Planned model: 2% of profit on closed wins only. No subscription. New-user promo
+          window (default 48 hours, 0% fees) is messaging only until the fee engine ships.
+        </p>
+      </details>
+      <details>
+        <summary>Is the sniper live tonight?</summary>
+        <p>
+          No. Wallet, funding, and Activate are the live path. Automatic snipes, trailing
+          take-profit, and Guard exits arrive in Phase 2. This page does not invent volume.
+        </p>
+      </details>
+      <details>
+        <summary>Where is the bot?</summary>
+        <p>
+          <a href={botLink}>@Big_Brain_Ape_Bot</a> on Telegram.
+        </p>
+      </details>
+    </div>
+  </section>
+
+  <section class="section" id="night">
+    <p class="eyebrow">The night shift</p>
+    <h2>You closed Telegram hours ago. The troop didn’t.</h2>
+    <div class="night">
+      <article>
+        <time>01 / Desk dark</time>
+        <h3>Five specialists keep scanning.</h3>
+        <p>You are offline. The head ape is not. This is the shift you do not see.</p>
+      </article>
+      <article>
+        <time>02 / A token mints</time>
+        <h3>Sniper flags the launch.</h3>
+        <p>Liquidity hits. Scout checks flow. Guard starts the four-check gate.</p>
+      </article>
+      <article>
+        <time>03 / The vote</time>
+        <h3>Five minds read it. One fires.</h3>
+        <p>Arbiter looks for a cleaner venue. Router picks the fill. The boss pulls the trigger.</p>
+      </article>
+      <article>
+        <time>04 / Morning</time>
+        <h3>You did not tap once.</h3>
+        <p>That story is the Phase 2 promise. Phase 1 gets you armed before the engine wakes up.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="closing">
+      <p class="eyebrow">Your turn</p>
+      <h2>One chat. Under a minute.</h2>
+      <p class="lead">
+        Open Telegram, fund the wallets, tap Activate. First live snipe waits on Phase 2 —
+        the desk is already yours.
+      </p>
+      <div class="cta-row">
+        <a class="btn btn-primary" href={botLink}>Launch the bot</a>
+        <a class="btn btn-ghost" href="/docs">Read the docs</a>
+      </div>
+    </div>
   </section>
 </BaseLayout>
