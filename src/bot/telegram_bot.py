@@ -24,7 +24,9 @@ from aiogram.types import TelegramObject, Update, User
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from loguru import logger
 
+from src.archives.writer import TradeArchiveWriter
 from src.billing.subscription import SubscriptionManager, Tier
+from src.config import ArchiveConfig
 from src.trading.executor import TradeExecutor
 from src.trading.position import PositionTracker, PositionStatus
 from src.trading.wallet import WalletManager
@@ -112,6 +114,12 @@ class TelegramBotApp:
         self.dp = Dispatcher()
 
         # Services
+        archive_cfg = ArchiveConfig()
+        self.archives = TradeArchiveWriter(
+            root=archive_cfg.root,
+            engine_live=archive_cfg.engine_live,
+            remote_store=archive_cfg.remote_store,
+        )
         self.subscriptions = SubscriptionManager()
         self.wallets = WalletManager()
         self.positions = PositionTracker()
@@ -120,6 +128,7 @@ class TelegramBotApp:
             wallet_manager=self.wallets,
             position_tracker=self.positions,
             analytics=self.analytics,
+            archives=self.archives,
             notify=self._notify_user,
         )
 
@@ -129,6 +138,12 @@ class TelegramBotApp:
     async def init(self) -> None:
         """Initialise all services and register routers."""
         logger.info("Initialising bot services…")
+
+        day = self.archives.ensure_day()
+        logger.info(
+            f"Trade archive day folder (UTC): {day} "
+            f"(engine_live={self.archives.engine_live}; empty/zero if no events)"
+        )
 
         await self.analytics.init()
         await self.subscriptions.init()
@@ -179,6 +194,7 @@ class TelegramBotApp:
         await self.wallets.close()
         await self.analytics.close()
         await self.subscriptions.close()
+        self.archives.close()
         await self.bot.session.close()
         logger.info("Bot shut down.")
 

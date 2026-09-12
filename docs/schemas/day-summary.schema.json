@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Simzy420/telegram-memecoin-sniper-bot-/docs/schemas/day-summary.schema.json",
+  "title": "Big Brain Ape day-summary.json",
+  "description": "UTC calendar-day roll-up per specialist and combined. Zeros mean no recorded events — never invented fills. Pack 2 specialists: scout, sniper, pulse, ledger, shield.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "schema_version",
+    "product",
+    "head_ape",
+    "date",
+    "timezone",
+    "engine_live",
+    "honesty",
+    "specialists",
+    "combined"
+  ],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "product": { "const": "Big Brain Ape The MemeCoin Sniper" },
+    "head_ape": { "const": "Big Brain Ape" },
+    "date": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+    },
+    "timezone": { "const": "UTC" },
+    "generated_at": { "type": "string" },
+    "engine_live": { "type": "boolean" },
+    "example": { "type": "boolean" },
+    "example_note": { "type": "string" },
+    "store": {
+      "type": "object",
+      "properties": {
+        "local_root": { "type": "string" },
+        "remote": {
+          "type": "string",
+          "const": "https://github.com/Simzy420/bba-trade-archives"
+        },
+        "note": { "type": "string" }
+      }
+    },
+    "honesty": {
+      "type": "object",
+      "required": ["engine_live", "invented_fills"],
+      "properties": {
+        "engine_live": { "type": "boolean" },
+        "invented_fills": { "type": "boolean", "const": false },
+        "note": { "type": "string" }
+      }
+    },
+    "specialists": {
+      "type": "object",
+      "required": ["scout", "sniper", "pulse", "ledger", "shield"],
+      "additionalProperties": false,
+      "properties": {
+        "scout": { "$ref": "#/$defs/specialistStats" },
+        "sniper": { "$ref": "#/$defs/specialistStats" },
+        "pulse": { "$ref": "#/$defs/specialistStats" },
+        "ledger": { "$ref": "#/$defs/specialistStats" },
+        "shield": { "$ref": "#/$defs/specialistStats" }
+      }
+    },
+    "combined": { "$ref": "#/$defs/specialistStats" }
+  },
+  "$defs": {
+    "specialistStats": {
+      "type": "object",
+      "required": ["events", "fills", "wins", "losses", "pnl_usd", "fees_usd", "volume"],
+      "properties": {
+        "events": { "type": "integer", "minimum": 0 },
+        "fills": { "type": "integer", "minimum": 0 },
+        "wins": { "type": "integer", "minimum": 0 },
+        "losses": { "type": "integer", "minimum": 0 },
+        "pnl_usd": { "type": "number" },
+        "fees_usd": { "type": "number" },
+        "volume": { "type": "number" }
+      }
+    }
+  }
+}

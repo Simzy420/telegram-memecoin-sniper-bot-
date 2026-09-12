@@ -30,6 +30,7 @@ from loguru import logger
 from src.trading.wallet import WalletManager
 from src.trading.position import Position, PositionTracker, PositionStatus
 from src.analytics.tracker import AnalyticsTracker
+from src.archives.writer import TradeArchiveWriter
 
 # --------------------------------------------------------------------------- #
 # Configuration
@@ -110,6 +111,7 @@ class TradeExecutor:
         wallet_manager:  handles signing & broadcast
         position_tracker: tracks open positions
         analytics:        records trades to SQLite
+        archives:         optional daily trade-archive writer (UTC day folders)
         notify:           async callable ``notify(user_id, message)``
         max_position_sol: hard cap per trade (safety)
         default_slippage: starting slippage percentage
@@ -122,6 +124,7 @@ class TradeExecutor:
         position_tracker: PositionTracker,
         analytics: AnalyticsTracker,
         notify: Optional[NotifyCallback] = None,
+        archives: Optional[TradeArchiveWriter] = None,
         max_position_sol: float = 0.5,
         default_slippage: float = 10.0,
         max_retries: int = MAX_RETRIES,
@@ -129,6 +132,7 @@ class TradeExecutor:
         self.wallet = wallet_manager
         self.positions = position_tracker
         self.analytics = analytics
+        self.archives = archives
         self.notify = notify
         self.max_position_sol = max_position_sol
         self.default_slippage = default_slippage
@@ -167,12 +171,14 @@ class TradeExecutor:
         """
         # 0 — Safety gate
         if not safety.safe:
-            return TradeResult(
+            result = TradeResult(
                 success=False, user_id=user_id,
                 token_address=token_address, token_symbol=token_symbol,
                 side="buy", amount_sol=0, price_usd=0, quantity=0,
                 error=f"Token failed safety check: {safety.reasons}",
             )
+            self._archive_shield_block(result, safety, chain)
+            return result
 
         # 1 — Calculate position size
         if amount_sol is None:
@@ -214,6 +220,7 @@ class TradeExecutor:
                 f"❌ <b>Buy failed</b> — {token_symbol}\n"
                 f"Error: {result.error}\nAttempts: {result.attempts}",
             )
+            self._archive_sniper_result(result, safety, chain, venue="jupiter")
             return result
 
         # 4 — Record position
@@ -256,6 +263,7 @@ class TradeExecutor:
             f"TP: ${position.take_profit_price:.8f}",
         )
 
+        self._archive_sniper_result(result, safety, chain, venue="jupiter")
         return result
 
     async def execute_sell(
@@ -296,6 +304,7 @@ class TradeExecutor:
                 user_id,
                 f"❌ <b>Sell failed</b> — {pos.token_symbol}\nError: {result.error}",
             )
+            self._archive_sniper_result(result, None, pos.chain, venue="jupiter")
             return result
 
         # Close position
@@ -339,6 +348,9 @@ class TradeExecutor:
             f"TX: <code>{result.tx_signature[:20]}…</code>",
         )
 
+        self._archive_sniper_result(
+            result, None, pos.chain, venue="jupiter", pnl_usd=pnl_usd, notes=reason
+        )
         return result
 
     # --------------------------- internal --------------------------------- #
@@ -549,3 +561,78 @@ class TradeExecutor:
                 await self.notify(user_id, message)
             except Exception as exc:
                 logger.warning(f"Notify callback error: {exc}")
+
+    def _archive_sniper_result(
+        self,
+        result: TradeResult,
+        safety: Optional[SafetyResult],
+        chain: str,
+        *,
+        venue: str,
+        pnl_usd: Optional[float] = None,
+        notes: str = "",
+    ) -> None:
+        """Record a real execution attempt. Does not invent fills."""
+        if self.archives is None:
+            return
+        shield: dict[str, Any] = {}
+        if safety is not None:
+            shield = {
+                "score": safety.safety_score,
+                "passed": safety.safe,
+                "reasons": list(safety.reasons),
+                "liquidity_usd": safety.liquidity_usd,
+            }
+        try:
+            self.archives.record_event(
+                {
+                    "specialist": "sniper",
+                    "chain": chain,
+                    "venue": venue,
+                    "token": {
+                        "address": result.token_address,
+                        "symbol": result.token_symbol,
+                    },
+                    "side": result.side,
+                    "size": result.amount_sol,
+                    "size_unit": "SOL",
+                    "price": result.price_usd,
+                    "tx_id": result.tx_signature,
+                    "order_id": result.position_id,
+                    "shield_checks": shield,
+                    "outcome": "filled" if result.success else "failed",
+                    "pnl_usd": pnl_usd,
+                    "notes": notes or result.error,
+                }
+            )
+        except Exception as exc:
+            logger.warning(f"Trade archive write failed: {exc}")
+
+    def _archive_shield_block(
+        self, result: TradeResult, safety: SafetyResult, chain: str
+    ) -> None:
+        """Record a real Shield block. Does not invent a fill."""
+        if self.archives is None:
+            return
+        try:
+            self.archives.record_event(
+                {
+                    "specialist": "shield",
+                    "chain": chain,
+                    "venue": "",
+                    "token": {
+                        "address": result.token_address,
+                        "symbol": result.token_symbol,
+                    },
+                    "outcome": "blocked",
+                    "shield_checks": {
+                        "score": safety.safety_score,
+                        "passed": False,
+                        "reasons": list(safety.reasons),
+                        "liquidity_usd": safety.liquidity_usd,
+                    },
+                    "notes": result.error,
+                }
+            )
+        except Exception as exc:
+            logger.warning(f"Trade archive write failed: {exc}")

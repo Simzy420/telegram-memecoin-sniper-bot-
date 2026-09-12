@@ -20,6 +20,8 @@ Trading engine (memecoin snipes + trailing take-profit) is **Phase 2**.
 
 - [FIRST_DRAFT.md](./FIRST_DRAFT.md) — architecture and scope  
 - [WHAT_I_NEED_FROM_YOU.md](./WHAT_I_NEED_FROM_YOU.md) — checklist of inputs you provide  
+- [docs/TRADE_ARCHIVES.md](./docs/TRADE_ARCHIVES.md) — daily UTC trade-archive layout for backtests  
+
 
 ## Structure
 
