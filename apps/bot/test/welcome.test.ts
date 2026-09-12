@@ -4,11 +4,16 @@ import { SPECIALISTS, startWelcomeCopy } from "../src/handlers/welcome.ts";
 
 test("welcome copy names the troop and stays on-brand", () => {
   const text = startWelcomeCopy();
-  for (const name of ["Sniper", "Scout", "Guard", "Arbiter", "Router"]) {
+  for (const name of ["Scout", "Sniper", "Pulse", "Ledger", "Shield"]) {
     assert.match(text, new RegExp(name));
   }
+  assert.equal(
+    SPECIALISTS.map((s) => s.name).join(","),
+    "Scout,Sniper,Pulse,Ledger,Shield",
+  );
   assert.equal(SPECIALISTS.length, 5);
   assert.match(text, /not live yet/i);
   assert.match(text, /MemeCoin Sniper/);
   assert.doesNotMatch(text, /Clawd|OpenClaw|clawd/i);
+  assert.doesNotMatch(text, /\bGuard\b|\bArbiter\b|\bRouter\b/);
 });

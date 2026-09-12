@@ -36,7 +36,7 @@ if (!index.includes('src="/mascot-hero-full.jpeg"')) {
 if (index.includes('src="/mascot-cutout.jpg"')) {
   fail("homepage must not use the cutout as the hero");
 }
-for (const name of ["Sniper", "Scout", "Guard", "Arbiter", "Router"]) {
+for (const name of ["Scout", "Sniper", "Pulse", "Ledger", "Shield"]) {
   if (!index.includes(name) || !docs.includes(name)) {
     fail(`${name} must appear on the homepage and docs`);
   }
@@ -71,6 +71,11 @@ if (/hero-scene[\s\S]{0,200}object-fit:\s*cover/.test(css)) {
 const branded = index + layout + docs;
 if (/Clawd|OpenClaw/i.test(branded)) {
   fail("site copy must not mention Clawd or OpenClaw");
+}
+for (const retired of ["Guard", "Arbiter", "Router"]) {
+  if (new RegExp(`\\b${retired}\\b`).test(branded)) {
+    fail(`${retired} must not appear in user-facing site copy`);
+  }
 }
 
 if (failures.length) {

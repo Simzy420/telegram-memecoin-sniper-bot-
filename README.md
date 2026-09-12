@@ -2,7 +2,7 @@
 
 Telegram memecoin desk — Phase 1 scaffold.
 
-One chat. Head ape plus five specialists: **Sniper**, **Scout**, **Guard**, **Arbiter**, **Router**.
+One chat. Head ape plus five specialists: **Scout**, **Sniper**, **Pulse**, **Ledger**, **Shield**.
 
 Bot: [https://t.me/Big_Brain_Ape_Bot](https://t.me/Big_Brain_Ape_Bot)
 

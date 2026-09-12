@@ -15,4 +15,4 @@ Official artwork for **Big Brain Ape The MemeCoin Sniper**.
 
 ## Troop
 
-One Telegram bot. Head ape plus five specialists: **Sniper**, **Scout**, **Guard**, **Arbiter**, **Router**.
+One Telegram bot. Head ape plus five specialists: **Scout**, **Sniper**, **Pulse**, **Ledger**, **Shield**.

@@ -1,11 +1,11 @@
 import { config } from "../config.js";
 
 export const SPECIALISTS = [
-  { mark: "◎", name: "Sniper", role: "launches and fresh liquidity" },
-  { mark: "◈", name: "Scout", role: "smart money, KOL, narrative" },
-  { mark: "▣", name: "Guard", role: "rug screens and emergency exits" },
-  { mark: "⬡", name: "Arbiter", role: "cross-chain spreads" },
-  { mark: "⇢", name: "Router", role: "best fill across DEXes" },
+  { mark: "◈", name: "Scout", role: "finds pairs and setups" },
+  { mark: "◎", name: "Sniper", role: "memecoin entries" },
+  { mark: "▹", name: "Pulse", role: "rapid day trader / tape" },
+  { mark: "▤", name: "Ledger", role: "positions, fills, day log" },
+  { mark: "▣", name: "Shield", role: "risk filters before entry" },
 ] as const;
 
 export function startWelcomeCopy(): string {
