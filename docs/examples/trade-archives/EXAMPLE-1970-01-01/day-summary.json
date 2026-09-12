@@ -1,5 +1,5 @@
 {
-  "schema_version": "1.0.0",
+  "schema_version": "1.1.0",
   "product": "Big Brain Ape The MemeCoin Sniper",
   "head_ape": "Big Brain Ape",
   "date": "1970-01-01",
@@ -8,21 +8,17 @@
   "engine_live": false,
   "example": true,
   "example_note": "EXAMPLE empty day — schema illustration only. Not live fills. Do not treat as production data.",
+  "store": {
+    "local_root": "data/trade-archives",
+    "remote": "https://github.com/Simzy420/bba-trade-archives",
+    "note": "Writer syncs/targets the private GitHub repo as the raw day-folder store. Schema and EXAMPLE stay in the public sniper repo. Do not publish fills to the public dashboard."
+  },
   "honesty": {
     "engine_live": false,
     "invented_fills": false,
     "note": "Zero counts mean no fills were recorded. The writer never invents fills. Phase 1 trading engine is not live."
   },
   "specialists": {
-    "sniper": {
-      "events": 0,
-      "fills": 0,
-      "wins": 0,
-      "losses": 0,
-      "pnl_usd": 0.0,
-      "fees_usd": 0.0,
-      "volume": 0.0
-    },
     "scout": {
       "events": 0,
       "fills": 0,
@@ -32,7 +28,7 @@
       "fees_usd": 0.0,
       "volume": 0.0
     },
-    "guard": {
+    "sniper": {
       "events": 0,
       "fills": 0,
       "wins": 0,
@@ -41,7 +37,7 @@
       "fees_usd": 0.0,
       "volume": 0.0
     },
-    "arbiter": {
+    "pulse": {
       "events": 0,
       "fills": 0,
       "wins": 0,
@@ -50,7 +46,16 @@
       "fees_usd": 0.0,
       "volume": 0.0
     },
-    "router": {
+    "ledger": {
+      "events": 0,
+      "fills": 0,
+      "wins": 0,
+      "losses": 0,
+      "pnl_usd": 0.0,
+      "fees_usd": 0.0,
+      "volume": 0.0
+    },
+    "shield": {
       "events": 0,
       "fills": 0,
       "wins": 0,

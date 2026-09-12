@@ -39,10 +39,18 @@ class TradingConfig:
 
 @dataclass
 class ArchiveConfig:
-    """Daily trade-archive root. Calendar days are UTC; live path is gitignored."""
+    """Daily trade-archive root. Calendar days are UTC; live path is gitignored.
+
+    Raw day folders sync to the private store (bba-trade-archives).
+    Schema stays in this repo. No secrets belong here.
+    """
 
     root: str = os.getenv("TRADE_ARCHIVE_ROOT", "data/trade-archives")
     timezone: str = "UTC"
+    remote_store: str = os.getenv(
+        "TRADE_ARCHIVE_REMOTE",
+        "https://github.com/Simzy420/bba-trade-archives",
+    )
     # Phase 1: trading engine is not live. Writer still creates empty day folders.
     engine_live: bool = os.getenv("TRADE_ENGINE_LIVE", "false").lower() in ("1", "true", "yes")
 

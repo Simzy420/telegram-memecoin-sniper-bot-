@@ -29,10 +29,15 @@ def open_today_archive():
     from src.config import ArchiveConfig
 
     cfg = ArchiveConfig()
-    writer = TradeArchiveWriter(root=cfg.root, engine_live=cfg.engine_live)
+    writer = TradeArchiveWriter(
+        root=cfg.root,
+        engine_live=cfg.engine_live,
+        remote_store=cfg.remote_store,
+    )
     day = writer.ensure_day()
     logger.info(
-        f"Trade archive ready (UTC {day.name}, engine_live={cfg.engine_live}): {day}"
+        f"Trade archive ready (UTC {day.name}, engine_live={cfg.engine_live}, "
+        f"store={writer.sync_target()}): {day}"
     )
     return writer, day
 

@@ -4,6 +4,7 @@ from src.archives.reader import load_day
 from src.archives.schema import (
     ARCHIVE_TIMEZONE,
     HEAD_APE,
+    PRIVATE_ARCHIVE_REPO,
     PRODUCT_NAME,
     SCHEMA_VERSION,
     SPECIALISTS,
@@ -16,6 +17,7 @@ from src.archives.writer import TradeArchiveWriter
 __all__ = [
     "ARCHIVE_TIMEZONE",
     "HEAD_APE",
+    "PRIVATE_ARCHIVE_REPO",
     "PRODUCT_NAME",
     "SCHEMA_VERSION",
     "SPECIALISTS",

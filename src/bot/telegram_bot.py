@@ -118,6 +118,7 @@ class TelegramBotApp:
         self.archives = TradeArchiveWriter(
             root=archive_cfg.root,
             engine_live=archive_cfg.engine_live,
+            remote_store=archive_cfg.remote_store,
         )
         self.subscriptions = SubscriptionManager()
         self.wallets = WalletManager()

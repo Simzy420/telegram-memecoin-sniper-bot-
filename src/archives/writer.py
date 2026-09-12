@@ -1,8 +1,10 @@
 """Daily trade-archive writer for Big Brain Ape The MemeCoin Sniper.
 
-Call :class:`TradeArchiveWriter` as Scout/Guard/Arbiter/Router/Sniper
-events happen. Folders rotate at **UTC midnight**. Live data lives under
-``data/trade-archives/YYYY-MM-DD/`` (gitignored).
+Call :class:`TradeArchiveWriter` as Scout / Sniper / Pulse / Ledger /
+Shield events happen. Folders rotate at **UTC midnight**. Local working
+copy: ``data/trade-archives/YYYY-MM-DD/`` (gitignored). The writer
+targets the private store https://github.com/Simzy420/bba-trade-archives
+for raw day folders. Schema stays in this sniper repo.
 
 Honesty: if the trading engine is not live, :meth:`ensure_day` still
 creates the folder tree and writes an empty/zero ``day-summary.json``.
@@ -26,6 +28,7 @@ from src.archives.schema import (
     EVENTS_FILENAME,
     FORBIDDEN_FOLDER_NAMES,
     HEAD_APE,
+    PRIVATE_ARCHIVE_REPO,
     PRODUCT_NAME,
     SCHEMA_VERSION,
     SPECIALISTS,
@@ -51,6 +54,10 @@ class TradeArchiveWriter:
         engine_live: Whether the trading engine is actually placing
             orders. Phase 1 is ``False`` — summaries stay at zero
             unless a caller records a real event.
+        remote_store: Private GitHub home for raw day folders
+            (default ``https://github.com/Simzy420/bba-trade-archives``).
+            No credentials are stored here; sync uses the operator's
+            existing git remotes.
     """
 
     def __init__(
@@ -59,9 +66,11 @@ class TradeArchiveWriter:
         *,
         clock: Optional[Clock] = None,
         engine_live: bool = False,
+        remote_store: str = PRIVATE_ARCHIVE_REPO,
     ) -> None:
         self.root = Path(root)
         self.engine_live = engine_live
+        self.remote_store = remote_store
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._lock = threading.Lock()
         self._current_date: Optional[date] = None
@@ -88,8 +97,8 @@ class TradeArchiveWriter:
         """Append one specialist event and refresh the day summary.
 
         Fills (buy/sell with outcome filled/partial/failed) are also
-        appended to ``combined-fills.csv``. Scout/Guard/Arbiter/Router
-        signals increment event counts only unless they are fills.
+        appended to ``combined-fills.csv``. Scout / Pulse / Ledger /
+        Shield signals increment event counts only unless they are fills.
         """
         payload = dict(event) if isinstance(event, dict) else event.model_dump()
         if payload.get("timestamp") in (None, ""):
@@ -122,6 +131,15 @@ class TradeArchiveWriter:
 
     def day_dir(self, when: Optional[datetime] = None) -> Path:
         return self.root / self.utc_today(when).isoformat()
+
+    def sync_target(self) -> str:
+        """Private repo the writer syncs/targets for raw day folders.
+
+        Schema and EXAMPLE stay in this sniper repo. Fills must not go
+        to the public dashboard. This returns the store URL only — it
+        does not push and does not invent fills.
+        """
+        return self.remote_store
 
     # --------------------------- internals ------------------------------- #
     def _switch_to(self, day: date) -> Path:
@@ -183,6 +201,15 @@ class TradeArchiveWriter:
             )
         data.setdefault("engine_live", self.engine_live)
         data.setdefault("honesty", {})
+        data.setdefault("store", {
+            "local_root": "data/trade-archives",
+            "remote": self.remote_store,
+            "note": (
+                "Writer syncs/targets the private GitHub repo as the raw "
+                "day-folder store. Schema stays in this sniper repo. "
+                "Do not publish fills to the public dashboard."
+            ),
+        })
         data["honesty"]["invented_fills"] = False
         data["honesty"]["engine_live"] = self.engine_live
         return data
@@ -222,6 +249,8 @@ class TradeArchiveWriter:
         self._summary["product"] = PRODUCT_NAME
         self._summary["head_ape"] = HEAD_APE
         self._summary["timezone"] = ARCHIVE_TIMEZONE
+        store = self._summary.setdefault("store", {})
+        store["remote"] = self.remote_store
         honesty = self._summary.setdefault("honesty", {})
         honesty["engine_live"] = self.engine_live
         honesty["invented_fills"] = False
@@ -274,7 +303,7 @@ def _event_to_csv_row(event: ArchiveEvent) -> dict[str, str]:
         "tx_id": event.tx_id,
         "order_id": event.order_id,
         "signal_context": json.dumps(event.signal_context, ensure_ascii=False, separators=(",", ":")),
-        "guard_checks": json.dumps(event.guard_checks, ensure_ascii=False, separators=(",", ":")),
+        "shield_checks": json.dumps(event.shield_checks, ensure_ascii=False, separators=(",", ":")),
         "outcome": event.outcome,
         "fee_amount": str(event.fees.amount),
         "fee_asset": event.fees.asset,

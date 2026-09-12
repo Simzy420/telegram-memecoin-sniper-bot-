@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Simzy420/telegram-memecoin-sniper-bot-/docs/schemas/archive-event.schema.json",
   "title": "Big Brain Ape archive event",
-  "description": "One specialist event in {specialist}/events.jsonl. Timezone is always UTC.",
+  "description": "One specialist event in {specialist}/events.jsonl. Timezone is always UTC. Pack 2 specialists: scout, sniper, pulse, ledger, shield.",
   "type": "object",
   "additionalProperties": true,
   "required": ["event_id", "timestamp", "timezone", "specialist"],
@@ -16,7 +16,7 @@
     "timezone": { "const": "UTC" },
     "specialist": {
       "type": "string",
-      "enum": ["sniper", "scout", "guard", "arbiter", "router"]
+      "enum": ["scout", "sniper", "pulse", "ledger", "shield"]
     },
     "chain": { "type": "string" },
     "venue": { "type": "string" },
@@ -37,7 +37,7 @@
     "tx_id": { "type": "string" },
     "order_id": { "type": "string" },
     "signal_context": { "type": "object" },
-    "guard_checks": { "type": "object" },
+    "shield_checks": { "type": "object" },
     "outcome": { "type": "string" },
     "fees": {
       "type": "object",

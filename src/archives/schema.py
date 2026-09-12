@@ -2,12 +2,16 @@
 
 Specialists are roles in **one** bot (not five bots):
 
-    Sniper, Scout, Guard, Arbiter, Router
+    Scout, Sniper, Pulse, Ledger, Shield
 
 Head ape: Big Brain Ape
 Product:  Big Brain Ape The MemeCoin Sniper
 
-Do **not** use Perp / Swarm folder names. Calendar days are UTC.
+Do **not** use retired Pack 1 names (Guard / Arbiter / Router) or
+Perp / Swarm folder names. Calendar days are UTC.
+
+Raw day folders are stored in the private repo
+https://github.com/Simzy420/bba-trade-archives — schema stays here.
 """
 from __future__ import annotations
 
@@ -19,13 +23,19 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
-SCHEMA_VERSION = "1.0.0"
+SCHEMA_VERSION = "1.1.0"
 PRODUCT_NAME = "Big Brain Ape The MemeCoin Sniper"
 HEAD_APE = "Big Brain Ape"
 ARCHIVE_TIMEZONE = "UTC"
 
-SPECIALISTS = ("sniper", "scout", "guard", "arbiter", "router")
-FORBIDDEN_FOLDER_NAMES = frozenset({"perp", "perps", "swarm", "hyperliquid"})
+# Pack 2 lock — folder order: scout/ sniper/ pulse/ ledger/ shield/
+SPECIALISTS = ("scout", "sniper", "pulse", "ledger", "shield")
+
+RETIRED_SPECIALISTS = frozenset({"guard", "arbiter", "router"})
+FORBIDDEN_ALIASES = frozenset({"perp", "perps", "swarm", "hyperliquid"})
+FORBIDDEN_FOLDER_NAMES = RETIRED_SPECIALISTS | FORBIDDEN_ALIASES
+
+PRIVATE_ARCHIVE_REPO = "https://github.com/Simzy420/bba-trade-archives"
 
 FILL_OUTCOMES = frozenset({"filled", "partial", "failed"})
 
@@ -49,7 +59,7 @@ COMBINED_FILLS_FIELDS = (
     "tx_id",
     "order_id",
     "signal_context",
-    "guard_checks",
+    "shield_checks",
     "outcome",
     "fee_amount",
     "fee_asset",
@@ -62,11 +72,11 @@ COMBINED_FILLS_FIELDS = (
 class Specialist(str, Enum):
     """Roles inside the single Big Brain Ape memecoin sniper bot."""
 
-    SNIPER = "sniper"
     SCOUT = "scout"
-    GUARD = "guard"
-    ARBITER = "arbiter"
-    ROUTER = "router"
+    SNIPER = "sniper"
+    PULSE = "pulse"
+    LEDGER = "ledger"
+    SHIELD = "shield"
 
 
 class TokenRef(BaseModel):
@@ -90,10 +100,10 @@ class Fees(BaseModel):
 
 
 class ArchiveEvent(BaseModel):
-    """One specialist event — signal, check, decision, route, or fill.
+    """One specialist event — setup, entry, tape, day-log, or risk filter.
 
     Required replay fields: timestamp, specialist, chain, venue, token,
-    side, size, price, tx/order id, signal context, guard checks,
+    side, size, price, tx/order id, signal context, shield checks,
     outcome, fees. Empty strings / zeros mean "not applicable", not
     invented data.
     """
@@ -115,7 +125,7 @@ class ArchiveEvent(BaseModel):
     tx_id: str = ""
     order_id: str = ""
     signal_context: dict[str, Any] = Field(default_factory=dict)
-    guard_checks: dict[str, Any] = Field(default_factory=dict)
+    shield_checks: dict[str, Any] = Field(default_factory=dict)
     outcome: str = ""
     fees: Fees = Field(default_factory=Fees)
     pnl_usd: Optional[float] = None
@@ -126,7 +136,12 @@ class ArchiveEvent(BaseModel):
     def _normalise_specialist(cls, v: Any) -> Any:
         if isinstance(v, str):
             key = v.strip().lower()
-            if key in FORBIDDEN_FOLDER_NAMES:
+            if key in RETIRED_SPECIALISTS:
+                raise ValueError(
+                    f"Retired specialist {v!r}. Pack 2 names are {list(SPECIALISTS)} "
+                    f"(Guard→Shield, Arbiter→Ledger, Router→Pulse)."
+                )
+            if key in FORBIDDEN_ALIASES:
                 raise ValueError(
                     f"Forbidden specialist folder {v!r}. "
                     f"Use one of {list(SPECIALISTS)} — not Perp/Swarm names."
@@ -199,6 +214,19 @@ def empty_specialist_stats() -> dict[str, Any]:
     }
 
 
+def store_metadata() -> dict[str, Any]:
+    """Where raw day folders live. No secrets. Schema stays in this repo."""
+    return {
+        "local_root": "data/trade-archives",
+        "remote": PRIVATE_ARCHIVE_REPO,
+        "note": (
+            "Writer syncs/targets the private GitHub repo as the raw day-folder "
+            "store. Schema and EXAMPLE stay in the public sniper repo. "
+            "Do not publish fills to the public dashboard."
+        ),
+    }
+
+
 def empty_day_summary(
     date_key: str,
     *,
@@ -216,6 +244,7 @@ def empty_day_summary(
         "timezone": ARCHIVE_TIMEZONE,
         "generated_at": generated_at or "",
         "engine_live": engine_live,
+        "store": store_metadata(),
         "honesty": {
             "engine_live": engine_live,
             "invented_fills": False,

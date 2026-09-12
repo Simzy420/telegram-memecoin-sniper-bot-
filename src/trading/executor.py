@@ -177,7 +177,7 @@ class TradeExecutor:
                 side="buy", amount_sol=0, price_usd=0, quantity=0,
                 error=f"Token failed safety check: {safety.reasons}",
             )
-            self._archive_guard_block(result, safety, chain)
+            self._archive_shield_block(result, safety, chain)
             return result
 
         # 1 — Calculate position size
@@ -575,9 +575,9 @@ class TradeExecutor:
         """Record a real execution attempt. Does not invent fills."""
         if self.archives is None:
             return
-        guard: dict[str, Any] = {}
+        shield: dict[str, Any] = {}
         if safety is not None:
-            guard = {
+            shield = {
                 "score": safety.safety_score,
                 "passed": safety.safe,
                 "reasons": list(safety.reasons),
@@ -599,7 +599,7 @@ class TradeExecutor:
                     "price": result.price_usd,
                     "tx_id": result.tx_signature,
                     "order_id": result.position_id,
-                    "guard_checks": guard,
+                    "shield_checks": shield,
                     "outcome": "filled" if result.success else "failed",
                     "pnl_usd": pnl_usd,
                     "notes": notes or result.error,
@@ -608,16 +608,16 @@ class TradeExecutor:
         except Exception as exc:
             logger.warning(f"Trade archive write failed: {exc}")
 
-    def _archive_guard_block(
+    def _archive_shield_block(
         self, result: TradeResult, safety: SafetyResult, chain: str
     ) -> None:
-        """Record a real Guard block. Does not invent a fill."""
+        """Record a real Shield block. Does not invent a fill."""
         if self.archives is None:
             return
         try:
             self.archives.record_event(
                 {
-                    "specialist": "guard",
+                    "specialist": "shield",
                     "chain": chain,
                     "venue": "",
                     "token": {
@@ -625,7 +625,7 @@ class TradeExecutor:
                         "symbol": result.token_symbol,
                     },
                     "outcome": "blocked",
-                    "guard_checks": {
+                    "shield_checks": {
                         "score": safety.safety_score,
                         "passed": False,
                         "reasons": list(safety.reasons),

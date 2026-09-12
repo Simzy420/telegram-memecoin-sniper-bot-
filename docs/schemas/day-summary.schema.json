@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/Simzy420/telegram-memecoin-sniper-bot-/docs/schemas/day-summary.schema.json",
   "title": "Big Brain Ape day-summary.json",
-  "description": "UTC calendar-day roll-up per specialist and combined. Zeros mean no recorded events — never invented fills.",
+  "description": "UTC calendar-day roll-up per specialist and combined. Zeros mean no recorded events — never invented fills. Pack 2 specialists: scout, sniper, pulse, ledger, shield.",
   "type": "object",
   "additionalProperties": true,
   "required": [
@@ -29,6 +29,17 @@
     "engine_live": { "type": "boolean" },
     "example": { "type": "boolean" },
     "example_note": { "type": "string" },
+    "store": {
+      "type": "object",
+      "properties": {
+        "local_root": { "type": "string" },
+        "remote": {
+          "type": "string",
+          "const": "https://github.com/Simzy420/bba-trade-archives"
+        },
+        "note": { "type": "string" }
+      }
+    },
     "honesty": {
       "type": "object",
       "required": ["engine_live", "invented_fills"],
@@ -40,14 +51,14 @@
     },
     "specialists": {
       "type": "object",
-      "required": ["sniper", "scout", "guard", "arbiter", "router"],
+      "required": ["scout", "sniper", "pulse", "ledger", "shield"],
       "additionalProperties": false,
       "properties": {
-        "sniper": { "$ref": "#/$defs/specialistStats" },
         "scout": { "$ref": "#/$defs/specialistStats" },
-        "guard": { "$ref": "#/$defs/specialistStats" },
-        "arbiter": { "$ref": "#/$defs/specialistStats" },
-        "router": { "$ref": "#/$defs/specialistStats" }
+        "sniper": { "$ref": "#/$defs/specialistStats" },
+        "pulse": { "$ref": "#/$defs/specialistStats" },
+        "ledger": { "$ref": "#/$defs/specialistStats" },
+        "shield": { "$ref": "#/$defs/specialistStats" }
       }
     },
     "combined": { "$ref": "#/$defs/specialistStats" }

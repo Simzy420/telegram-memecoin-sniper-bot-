@@ -2,7 +2,7 @@
 
 A day folder is the unit of replay: ``day-summary.json`` for roll-ups,
 ``combined-fills.csv`` for the fill tape, and ``{specialist}/events.jsonl``
-for signal / guard / decision / route context.
+for Scout / Sniper / Pulse / Ledger / Shield context.
 """
 from __future__ import annotations
 
