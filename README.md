@@ -1,20 +1,23 @@
-# Snipr (placeholder name)
+# Big Brain Ape The MemeCoin Sniper
 
-Telegram memecoin agent — Phase 1 scaffold.
+Telegram memecoin desk — Phase 1 scaffold.
 
-> **Product name TBD.** Set `BOT_NAME` in `.env`.  
-> **This repo is separate from Big-Brain-Ape.**
+One chat. Head ape plus five specialists: **Scout**, **Sniper**, **Pulse**, **Ledger**, **Shield**.
+
+Bot: [https://t.me/Big_Brain_Ape_Bot](https://t.me/Big_Brain_Ape_Bot)
+
+The homepage hero is the official full ape + chart artwork. Do not crop it. See [`assets/mascot/README.md`](./assets/mascot/README.md).
 
 ## Phase 1
 
 Four-tap user flow:
 
-1. Start bot  
+1. Open the chat  
 2. Generate wallet  
 3. Fund ≥ $100 (Base / Ethereum / Binance / Monad / Robinhood / Solana)  
-4. Activate bot  
+4. Activate  
 
-Trading engine (memecoin snipes + trailing take-profit) is **Phase 2**.
+Trading engine (specialist assignment, snipes, trailing take-profit) is **Phase 2**.
 
 ## Docs
 
@@ -36,6 +39,7 @@ packages/shared   Chain config + shared types
 ```bash
 cp .env.example .env
 # fill TELEGRAM_BOT_TOKEN, WALLET_ENCRYPTION_KEY, DATABASE_URL
+# never commit secrets
 
 docker compose up -d postgres   # optional local DB
 npm install
@@ -46,7 +50,8 @@ npm run dev:web
 ## Scripts
 
 | Command | Purpose |
-|---------|---------|
+| --- | --- |
 | `npm run dev:bot` | Run Telegram bot |
 | `npm run dev:web` | Run docs site |
 | `npm run build` | Build all packages |
+| `npm test` | Hero/brand checks + welcome copy tests |

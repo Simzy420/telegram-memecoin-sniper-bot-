@@ -1,13 +1,16 @@
 ---
 import BaseLayout from "../layouts/BaseLayout.astro";
 
-const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Snipr";
+const productName = "Big Brain Ape The MemeCoin Sniper";
+const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Big Brain Ape";
 const minFund = import.meta.env.PUBLIC_MIN_FUND_USD ?? "100";
+const botLink = import.meta.env.PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/Big_Brain_Ape_Bot";
 ---
-<BaseLayout title={`Docs — ${botName}`} description={`How to use ${botName}.`}>
+<BaseLayout title={`Docs — ${productName}`} description={`How to use ${productName}.`}>
   <div class="docs-layout">
     <aside class="docs-nav">
       <a href="#overview">Overview</a>
+      <a href="#troop">The troop</a>
       <a href="#howto">How to start</a>
       <a href="#networks">Networks</a>
       <a href="#wallet">Wallet &amp; keys</a>
@@ -19,9 +22,16 @@ const minFund = import.meta.env.PUBLIC_MIN_FUND_USD ?? "100";
     </aside>
 
     <article class="prose">
+      <img
+        class="docs-avatar"
+        src="/mascot-cutout.jpg"
+        alt={`${botName} mark`}
+        width="72"
+        height="72"
+      />
       <h1>Docs</h1>
       <p>
-        {botName} is a Telegram-native memecoin agent. Phase 1 covers wallet, funding, and activate.
+        {productName} is a Telegram-native memecoin desk. Phase 1 covers wallet, funding, and activate.
         Automated snipes with dynamic stop-loss and trailing take-profit arrive in Phase 2.
       </p>
 
@@ -29,11 +39,22 @@ const minFund = import.meta.env.PUBLIC_MIN_FUND_USD ?? "100";
       <p>
         There is no separate signup. Your Telegram account is your identity. The bot generates
         deposit addresses, tracks portfolio value, and unlocks Activate at ${minFund} USD.
+        You talk to one bot — the head ape — who assigns five specialists when the engine is live.
       </p>
+
+      <h2 id="troop">The troop</h2>
+      <p>One chat. The boss plus five specialists:</p>
+      <ul>
+        <li><strong>Scout</strong> — finds pairs and setups</li>
+        <li><strong>Sniper</strong> — memecoin entries</li>
+        <li><strong>Pulse</strong> — rapid day trader / tape</li>
+        <li><strong>Ledger</strong> — positions, fills, day log</li>
+        <li><strong>Shield</strong> — risk filters before entry</li>
+      </ul>
 
       <h2 id="howto">How to start</h2>
       <ol>
-        <li>Open the bot in Telegram and tap <strong>Start</strong>.</li>
+        <li>Open <a href={botLink}>@Big_Brain_Ape_Bot</a> and tap <strong>Start</strong>.</li>
         <li>Tap <strong>Generate New Wallet</strong>.</li>
         <li>Copy your EVM and SOL addresses (or use Deposit).</li>
         <li>Send funds until Total ≥ ${minFund}.</li>
@@ -72,17 +93,17 @@ const minFund = import.meta.env.PUBLIC_MIN_FUND_USD ?? "100";
 
       <h2 id="phase2">What comes next</h2>
       <ul>
+        <li>Scout / Sniper / Pulse / Ledger / Shield assignment on each opportunity</li>
         <li>Memecoin opportunity detection on selected DEXes</li>
         <li>Automatic entries from your funded wallet</li>
-        <li>Dynamic stop-loss</li>
-        <li>Trailing take-profit that ratchets as price runs</li>
+        <li>Dynamic stop-loss and trailing take-profit</li>
         <li>Telegram notifications on fills</li>
       </ul>
 
       <h2 id="fees">Fees</h2>
       <p>
-        Launch messaging includes a new-user promo window (default 48 hours, 0% fees). Exact fee
-        schedule will be published before Phase 2 trading goes live.
+        Planned fee: 2% of profit on closed wins only. Launch messaging includes a new-user promo
+        window (default 48 hours, 0% fees). Exact schedule publishes before Phase 2 trading goes live.
       </p>
 
       <h2 id="risks">Risks</h2>
@@ -97,7 +118,7 @@ const minFund = import.meta.env.PUBLIC_MIN_FUND_USD ?? "100";
       <p><strong>Do I need an exchange API key?</strong><br />No.</p>
       <p><strong>Is there a subscription?</strong><br />No subscription in the planned model.</p>
       <p><strong>Can I withdraw?</strong><br />Yes — Transfer ships fully in Phase 2; you can also export keys and move funds yourself.</p>
-      <p><strong>Why is the product name Snipr?</strong><br />Placeholder until the final name is chosen.</p>
+      <p><strong>Where is the Telegram bot?</strong><br /><a href={botLink}>@Big_Brain_Ape_Bot</a></p>
     </article>
   </div>
 </BaseLayout>

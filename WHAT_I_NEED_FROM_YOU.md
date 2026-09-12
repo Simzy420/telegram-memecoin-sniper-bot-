@@ -6,7 +6,7 @@ Items marked **blocker** are required before a working Phase 1 demo on real Tele
 
 ## Blockers (needed to run Phase 1 for real)
 
-1. **Product name** — replaces placeholder `Snipr` everywhere (bot username, site title, copy).
+1. **Product name** — ✅ **Big Brain Ape The MemeCoin Sniper**. Bot: [@Big_Brain_Ape_Bot](https://t.me/Big_Brain_Ape_Bot).
 2. **Telegram bot token** — create via [@BotFather](https://t.me/BotFather); send me the token (or put it in secrets / `.env`, never commit it).
 3. **Telegram bot username** — e.g. `@YourName_Bot` (for deep links on the website).
 4. **New GitHub repository** — ✅ Received: https://github.com/Simzy420/telegram-memecoin-sniper-bot- — push blocked until Cursor GitHub App has write access to that repo.

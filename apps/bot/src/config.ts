@@ -9,9 +9,9 @@ function required(name: string): string {
 }
 
 export const config = {
-  botName: process.env.BOT_NAME ?? "Snipr",
+  botName: process.env.BOT_NAME ?? "Big Brain Ape",
   botTagline:
-    process.env.BOT_TAGLINE ?? "Autonomous memecoin agent",
+    process.env.BOT_TAGLINE ?? "The head ape hunts while you sleep.",
   telegramToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
   telegramUsername: process.env.TELEGRAM_BOT_USERNAME ?? "",
   websiteUrl: process.env.WEBSITE_URL ?? "http://localhost:4321",

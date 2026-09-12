@@ -6,8 +6,13 @@ interface Props {
   description?: string;
 }
 
-const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Snipr";
-const { title = botName, description = "Autonomous memecoin agent on Telegram." } = Astro.props;
+const productName = "Big Brain Ape The MemeCoin Sniper";
+const botName = import.meta.env.PUBLIC_BOT_NAME ?? "Big Brain Ape";
+const botLink = import.meta.env.PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/Big_Brain_Ape_Bot";
+const {
+  title = productName,
+  description = "Head ape plus five specialists in one Telegram chat. The MemeCoin Sniper.",
+} = Astro.props;
 ---
 <!doctype html>
 <html lang="en">
@@ -15,23 +20,36 @@ const { title = botName, description = "Autonomous memecoin agent on Telegram." 
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content="/mascot-hero-full.jpeg" />
     <title>{title}</title>
+    <link rel="icon" type="image/jpeg" href="/mascot-cutout.jpg" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   </head>
   <body>
     <div class="wrap">
       <header class="site-header">
-        <a class="brand" href="/">{botName}</a>
+        <a class="brand" href="/">
+          <img class="brand-mark" src="/mascot-cutout.jpg" alt="" width="40" height="40" />
+          <span class="brand-copy">
+            <span class="brand-name">{botName}</span>
+            <span class="brand-sub">The MemeCoin Sniper</span>
+          </span>
+        </a>
         <nav class="nav">
+          <a href="/#how">How</a>
+          <a href="/#specialists">Troop</a>
+          <a href="/#venues">Venues</a>
           <a href="/docs">Docs</a>
-          <a href="/docs#howto">How to start</a>
-          <a href="/docs#risks">Risks</a>
+          <a class="nav-cta" href={botLink}>Telegram</a>
         </nav>
       </header>
       <slot />
       <footer class="site-footer">
+        <p class="marks">APE TOGETHER STRONG · NOT BORED ANYMORE</p>
         <p>
-          {botName} is experimental software. Memecoins are extremely volatile.
+          {productName} is experimental software. Memecoins are extremely volatile.
           Never deposit more than you can afford to lose.
         </p>
       </footer>
