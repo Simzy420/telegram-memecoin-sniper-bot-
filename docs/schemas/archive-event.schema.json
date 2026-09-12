@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/Simzy420/telegram-memecoin-sniper-bot-/docs/schemas/archive-event.schema.json",
+  "title": "Big Brain Ape archive event",
+  "description": "One specialist event in {specialist}/events.jsonl. Timezone is always UTC.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["event_id", "timestamp", "timezone", "specialist"],
+  "properties": {
+    "event_id": { "type": "string", "minLength": 1 },
+    "timestamp": {
+      "type": "string",
+      "description": "UTC ISO-8601 with Z suffix",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?Z$"
+    },
+    "timezone": { "const": "UTC" },
+    "specialist": {
+      "type": "string",
+      "enum": ["sniper", "scout", "guard", "arbiter", "router"]
+    },
+    "chain": { "type": "string" },
+    "venue": { "type": "string" },
+    "token": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "address": { "type": "string" },
+        "symbol": { "type": "string" },
+        "name": { "type": "string" }
+      }
+    },
+    "side": { "type": "string", "enum": ["buy", "sell", ""] },
+    "size": { "type": ["number", "null"] },
+    "size_unit": { "type": "string" },
+    "price": { "type": ["number", "null"] },
+    "price_unit": { "type": "string" },
+    "tx_id": { "type": "string" },
+    "order_id": { "type": "string" },
+    "signal_context": { "type": "object" },
+    "guard_checks": { "type": "object" },
+    "outcome": { "type": "string" },
+    "fees": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "amount": { "type": "number" },
+        "asset": { "type": "string" },
+        "usd": { "type": "number" }
+      }
+    },
+    "pnl_usd": { "type": ["number", "null"] },
+    "notes": { "type": "string" }
+  }
+}

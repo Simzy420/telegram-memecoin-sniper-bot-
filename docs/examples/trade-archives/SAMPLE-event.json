@@ -1,0 +1,42 @@
+{
+  "example": true,
+  "example_note": "FICTIONAL SAMPLE — field walkthrough only. Not a live fill. Do not mix into production backtests.",
+  "event_id": "example000000000000000000000001",
+  "timestamp": "1970-01-01T00:00:00.000Z",
+  "timezone": "UTC",
+  "specialist": "sniper",
+  "chain": "solana",
+  "venue": "jupiter",
+  "token": {
+    "address": "So11111111111111111111111111111111111111112",
+    "symbol": "EXAMPLE",
+    "name": "Example Token"
+  },
+  "side": "buy",
+  "size": 0.25,
+  "size_unit": "SOL",
+  "price": 0.00001234,
+  "price_unit": "USD",
+  "tx_id": "EXAMPLE_TX_NOT_A_REAL_SIGNATURE",
+  "order_id": "EXAMPLE_ORDER_NOT_LIVE",
+  "signal_context": {
+    "source": "pumpfun",
+    "scout_event_id": "example-scout-1",
+    "liquidity_usd": 12000,
+    "detected_at": "1970-01-01T00:00:00.000Z"
+  },
+  "guard_checks": {
+    "score": 82,
+    "band": "safe",
+    "passed": true,
+    "reasons": []
+  },
+  "outcome": "filled",
+  "fees": {
+    "amount": 0.0001,
+    "asset": "SOL",
+    "usd": 0.015
+  },
+  "pnl_usd": null,
+  "notes": "SAMPLE / FICTIONAL — illustrates replay fields only."
+}

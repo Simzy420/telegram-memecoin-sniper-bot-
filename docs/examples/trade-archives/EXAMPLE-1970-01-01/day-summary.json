@@ -1,0 +1,72 @@
+{
+  "schema_version": "1.0.0",
+  "product": "Big Brain Ape The MemeCoin Sniper",
+  "head_ape": "Big Brain Ape",
+  "date": "1970-01-01",
+  "timezone": "UTC",
+  "generated_at": "1970-01-01T00:00:00.000Z",
+  "engine_live": false,
+  "example": true,
+  "example_note": "EXAMPLE empty day — schema illustration only. Not live fills. Do not treat as production data.",
+  "honesty": {
+    "engine_live": false,
+    "invented_fills": false,
+    "note": "Zero counts mean no fills were recorded. The writer never invents fills. Phase 1 trading engine is not live."
+  },
+  "specialists": {
+    "sniper": {
+      "events": 0,
+      "fills": 0,
+      "wins": 0,
+      "losses": 0,
+      "pnl_usd": 0.0,
+      "fees_usd": 0.0,
+      "volume": 0.0
+    },
+    "scout": {
+      "events": 0,
+      "fills": 0,
+      "wins": 0,
+      "losses": 0,
+      "pnl_usd": 0.0,
+      "fees_usd": 0.0,
+      "volume": 0.0
+    },
+    "guard": {
+      "events": 0,
+      "fills": 0,
+      "wins": 0,
+      "losses": 0,
+      "pnl_usd": 0.0,
+      "fees_usd": 0.0,
+      "volume": 0.0
+    },
+    "arbiter": {
+      "events": 0,
+      "fills": 0,
+      "wins": 0,
+      "losses": 0,
+      "pnl_usd": 0.0,
+      "fees_usd": 0.0,
+      "volume": 0.0
+    },
+    "router": {
+      "events": 0,
+      "fills": 0,
+      "wins": 0,
+      "losses": 0,
+      "pnl_usd": 0.0,
+      "fees_usd": 0.0,
+      "volume": 0.0
+    }
+  },
+  "combined": {
+    "events": 0,
+    "fills": 0,
+    "wins": 0,
+    "losses": 0,
+    "pnl_usd": 0.0,
+    "fees_usd": 0.0,
+    "volume": 0.0
+  }
+}

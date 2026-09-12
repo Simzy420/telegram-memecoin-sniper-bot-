@@ -1,0 +1,1 @@
+timestamp,event_id,specialist,chain,venue,token_address,token_symbol,side,size,size_unit,price,price_unit,tx_id,order_id,signal_context,guard_checks,outcome,fee_amount,fee_asset,fee_usd,pnl_usd,notes
