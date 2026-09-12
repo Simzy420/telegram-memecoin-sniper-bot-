@@ -16,6 +16,7 @@ from src.safety.rug_checker import RugChecker
 
 # ---- detectors ----
 from src.detectors.pumpfun_detector import PumpFunDetector, PUMPFUN_PROGRAM_ID
+from src.archives import TradeArchiveWriter, SPECIALISTS, load_day
 
 
 def test_models():
@@ -169,9 +170,26 @@ def test_detector_construct():
     print("✓ PumpFunDetector ws-mode construct OK")
 
 
+def test_trade_archive_empty_day():
+    """Writer creates a UTC day folder with zero fills when the engine is dark."""
+    import tempfile
+    from pathlib import Path
+
+    with tempfile.TemporaryDirectory() as tmp:
+        writer = TradeArchiveWriter(root=tmp, engine_live=False)
+        day = writer.ensure_day()
+        loaded = load_day(day)
+        assert loaded["summary"]["combined"]["fills"] == 0
+        assert loaded["fills"] == []
+        assert set(loaded["events"]) == set(SPECIALISTS)
+        assert (Path(tmp) / day.name / "sniper").is_dir()
+        print(f"✓ Trade archive empty day: {day.name} specialists={list(SPECIALISTS)}")
+
+
 if __name__ == "__main__":
     test_models()
     test_scoring()
     test_rug_checker_skip_behavior()
     test_detector_construct()
+    test_trade_archive_empty_day()
     print("\n=== ALL SMOKE TESTS PASSED ===")
