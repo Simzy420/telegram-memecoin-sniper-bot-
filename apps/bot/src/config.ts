@@ -8,11 +8,43 @@ function required(name: string): string {
   return value;
 }
 
+const PUBLIC_ETH_RPC = "https://ethereum.publicnode.com";
+const PUBLIC_BASE_RPC = "https://base.publicnode.com";
+const PUBLIC_SOL_RPC = "https://api.mainnet-beta.solana.com";
+
+function pickRpc(
+  explicit: string | undefined,
+  publicDefault: string,
+  dedicated: string | null,
+): string {
+  if (explicit && explicit !== publicDefault) return explicit;
+  if (dedicated) return dedicated;
+  return explicit || publicDefault;
+}
+
+function dedicatedRpcs(): { ethereum: string | null; base: string | null; solana: string | null } {
+  const alchemy = process.env.ALCHEMY_API_KEY ?? "";
+  const helius = process.env.HELIUS_API_KEY ?? "";
+  return {
+    ethereum: alchemy ? `https://eth-mainnet.g.alchemy.com/v2/${alchemy}` : null,
+    base: alchemy ? `https://base-mainnet.g.alchemy.com/v2/${alchemy}` : null,
+    solana: helius ? `https://mainnet.helius-rpc.com/?api-key=${helius}` : null,
+  };
+}
+
+const dedicated = dedicatedRpcs();
+
 export const config = {
-  botName: process.env.BOT_NAME ?? "Big Brain Ape",
+  botName: process.env.BOT_NAME ?? "Big Brain Ape The MemeCoin Sniper",
   botTagline:
     process.env.BOT_TAGLINE ?? "The head ape hunts while you sleep.",
   telegramToken: process.env.TELEGRAM_BOT_TOKEN ?? "",
+  /** Optional. Richer desk lines. The paper book does not depend on it. */
+  openaiApiKey: process.env.OPENAI_API_KEY ?? "",
+  heliusApiKey: process.env.HELIUS_API_KEY ?? "",
+  alchemyApiKey: process.env.ALCHEMY_API_KEY ?? "",
+  /** Exact string "true" opts into the live flag. This build still does not broadcast. */
+  liveTrading: process.env.LIVE_TRADING === "true",
   telegramUsername: process.env.TELEGRAM_BOT_USERNAME ?? "",
   websiteUrl: process.env.WEBSITE_URL ?? "http://localhost:4321",
   docsUrl: process.env.DOCS_URL ?? "http://localhost:4321/docs",
@@ -28,12 +60,12 @@ export const config = {
   coingeckoApiUrl:
     process.env.COINGECKO_API_URL ?? "https://api.coingecko.com/api/v3",
   rpc: {
-    ethereum: process.env.RPC_ETHEREUM ?? "https://ethereum.publicnode.com",
-    base: process.env.RPC_BASE ?? "https://base.publicnode.com",
+    ethereum: pickRpc(process.env.RPC_ETHEREUM, PUBLIC_ETH_RPC, dedicated.ethereum),
+    base: pickRpc(process.env.RPC_BASE, PUBLIC_BASE_RPC, dedicated.base),
     binance: process.env.RPC_BSC ?? "https://bsc.publicnode.com",
     monad: process.env.RPC_MONAD ?? "",
     robinhood: process.env.RPC_ROBINHOOD ?? "",
-    solana: process.env.RPC_SOLANA ?? "https://api.mainnet-beta.solana.com",
+    solana: pickRpc(process.env.RPC_SOLANA, PUBLIC_SOL_RPC, dedicated.solana),
   },
 };
 
@@ -47,6 +79,13 @@ export function assertRuntimeConfig(): void {
     console.warn(
       "[snipr] WALLET_ENCRYPTION_KEY is still a placeholder. Do not use with real funds.",
     );
+  }
+  if (config.liveTrading) {
+    console.warn(
+      "[bba] LIVE_TRADING=true but this build has no broadcaster. Desk stays on paper.",
+    );
+  } else {
+    console.log("[bba] paper mode (LIVE_TRADING is not true).");
   }
 }
 

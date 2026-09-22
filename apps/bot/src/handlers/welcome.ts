@@ -1,12 +1,12 @@
 import { config } from "../config.js";
+import { SPECIALISTS } from "../team/personas.js";
 
-export const SPECIALISTS = [
-  { mark: "◈", name: "Scout", role: "finds pairs and setups" },
-  { mark: "◎", name: "Sniper", role: "memecoin entries" },
-  { mark: "▹", name: "Pulse", role: "rapid day trader / tape" },
-  { mark: "▤", name: "Ledger", role: "positions, fills, day log" },
-  { mark: "▣", name: "Shield", role: "risk filters before entry" },
-] as const;
+export { SPECIALISTS };
+
+function productTitle(): string {
+  if (/memecoin sniper/i.test(config.botName)) return config.botName;
+  return `${config.botName} The MemeCoin Sniper`;
+}
 
 export function startWelcomeCopy(): string {
   const troop = SPECIALISTS.map((s) => `${s.mark} *${s.name}* — ${s.role}`).join(
@@ -14,21 +14,22 @@ export function startWelcomeCopy(): string {
   );
 
   return (
-    `🦍 *${config.botName} The MemeCoin Sniper*\n` +
+    `🦍 *${productTitle()}*\n` +
     `${config.botTagline}\n\n` +
-    `One Telegram chat. The head ape plus five specialists.\n` +
-    `The boss picks who handles the tape.\n\n` +
+    `One Telegram chat. Big Brain Ape is the boss. Five specialists answer in this same chat.\n\n` +
     `*The troop*\n` +
     `${troop}\n\n` +
-    `2% on winning trades only. No subscription. Export your keys anytime.\n` +
-    `The memecoin trading engine is *not live yet* — Phase 1 is wallet, fund, and activate.\n` +
-    (config.promoEnabled
-      ? `🎁 0% fees for new users during the first ${config.promoHours} hours (fee engine is Phase 2).\n\n`
-      : "\n") +
-    `*4 steps:*\n` +
+    `*Menus*\n` +
+    `• *Hire Team* — seat Scout, Sniper, Pulse, Ledger, and Shield\n` +
+    `• *Watch Tape* — Scout surfaces names, Shield runs a checklist, Pulse reads the print\n` +
+    `• *Desk Status* — who is on the desk, and the paper book\n\n` +
+    `Say "scout", "shield check SLEEPAPE", "snipe SLEEPAPE", or "ledger".\n\n` +
+    `The memecoin trading engine is *not live yet*. The desk defaults to paper. ` +
+    `LIVE_TRADING stays off unless you set it, and this build never broadcasts a transaction.\n\n` +
+    `*When you want a wallet*\n` +
     `1. Open the chat (done)\n` +
-    `2. Fund the wallets\n` +
-    `3. 1-click trading\n` +
-    `4. Profit while asleep\n`
+    `2. Generate a wallet and fund it\n` +
+    `3. Activate once the portfolio clears the minimum\n` +
+    `4. The troop still papers until a later live engine ships\n`
   );
 }

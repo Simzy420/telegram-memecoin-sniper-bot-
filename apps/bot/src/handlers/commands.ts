@@ -20,6 +20,7 @@ import {
   mainWalletKeyboard,
   startKeyboard,
 } from "./keyboards.js";
+import { registerTeamHandlers } from "./team.js";
 import { startWelcomeCopy } from "./welcome.js";
 
 function promoLine(): string {
@@ -224,4 +225,6 @@ export function registerHandlers(bot: Bot): void {
       { reply_markup: mainWalletKeyboard() },
     );
   });
+
+  registerTeamHandlers(bot);
 }

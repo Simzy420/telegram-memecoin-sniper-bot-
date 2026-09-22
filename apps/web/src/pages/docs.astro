@@ -11,6 +11,7 @@ const botLink = import.meta.env.PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/Big_Bra
     <aside class="docs-nav">
       <a href="#overview">Overview</a>
       <a href="#troop">The troop</a>
+      <a href="#desk">Talk to the team</a>
       <a href="#howto">How to start</a>
       <a href="#networks">Networks</a>
       <a href="#wallet">Wallet &amp; keys</a>
@@ -31,15 +32,17 @@ const botLink = import.meta.env.PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/Big_Bra
       />
       <h1>Docs</h1>
       <p>
-        {productName} is a Telegram-native memecoin desk. Phase 1 covers wallet, funding, and activate.
-        Automated snipes with dynamic stop-loss and trailing take-profit arrive in Phase 2.
+        {productName} is a Telegram-native memecoin desk. One bot. Big Brain Ape coordinates
+        five specialists in the same chat. The paper desk (hire, watch, status, paper fills)
+        runs now. Automated chain snipes, stop-loss, and trailing take-profit are not live.
       </p>
 
       <h2 id="overview">Overview</h2>
       <p>
-        There is no separate signup. Your Telegram account is your identity. The bot generates
-        deposit addresses, tracks portfolio value, and unlocks Activate at ${minFund} USD.
-        You talk to one bot — the head ape — who assigns five specialists when the engine is live.
+        There is no separate signup. Your Telegram account is your identity. You talk to one bot.
+        Big Brain Ape answers, then Scout, Sniper, Pulse, Ledger, and Shield speak in the same chat.
+        Paper mode is the default. The bot also generates deposit addresses and unlocks Activate
+        at ${minFund} USD. Activate does not start chain snipes.
       </p>
 
       <h2 id="troop">The troop</h2>
@@ -51,6 +54,19 @@ const botLink = import.meta.env.PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/Big_Bra
         <li><strong>Ledger</strong> — positions, fills, day log</li>
         <li><strong>Shield</strong> — risk filters before entry</li>
       </ul>
+
+      <h2 id="desk">Talk to the team</h2>
+      <ol>
+        <li>Open <a href={botLink}>@Big_Brain_Ape_Bot</a> and tap <strong>Start</strong>.</li>
+        <li>Tap <strong>Hire Team</strong> (<code>/hire</code>).</li>
+        <li>Tap <strong>Watch Tape</strong> (<code>/watch</code>). Scout lists names, Shield checks the first, Pulse reads it.</li>
+        <li>Reply <code>shield check SLEEPAPE</code>, <code>snipe SLEEPAPE</code>, or <code>ledger</code>.</li>
+      </ol>
+      <p>
+        <code>SLEEPAPE</code>, <code>PAPERPEPE</code>, and <code>RUGPUP</code> are drill names when the
+        market feed is down. A paper fill changes the chat journal only.
+        <code>LIVE_TRADING</code> defaults to false, and this build has no transaction broadcaster.
+      </p>
 
       <h2 id="howto">How to start</h2>
       <ol>
@@ -93,8 +109,8 @@ const botLink = import.meta.env.PUBLIC_TELEGRAM_BOT_URL ?? "https://t.me/Big_Bra
 
       <h2 id="phase2">What comes next</h2>
       <ul>
-        <li>Scout / Sniper / Pulse / Ledger / Shield assignment on each opportunity</li>
-        <li>Memecoin opportunity detection on selected DEXes</li>
+        <li>Chain broadcasts from the funded wallet (paper fills already work in chat)</li>
+        <li>Memecoin opportunity detection wired into execution</li>
         <li>Automatic entries from your funded wallet</li>
         <li>Dynamic stop-loss and trailing take-profit</li>
         <li>Telegram notifications on fills</li>

@@ -4,7 +4,56 @@ import { config } from "../config.js";
 
 const { Pool } = pg;
 
-export const pool = new Pool({ connectionString: config.databaseUrl });
+export const pool = new Pool({
+  connectionString: config.databaseUrl,
+  connectionTimeoutMillis: 2000,
+  allowExitOnIdle: true,
+});
+
+pool.on("error", (err) => {
+  console.warn("[bba] postgres pool error", err.message);
+});
+
+const memory = new Map<string, UserRow>();
+let persist: boolean | null = null;
+
+export function userStoreKind(): "postgres" | "memory" {
+  return persist === true ? "postgres" : "memory";
+}
+
+async function canPersist(): Promise<boolean> {
+  if (process.env.SKIP_DATABASE === "1") {
+    persist = false;
+    return false;
+  }
+  if (persist !== null) return persist;
+  try {
+    await pool.query("SELECT 1");
+    persist = true;
+  } catch {
+    persist = false;
+    console.warn(
+      "[bba] Postgres unavailable — user records stay in memory for this process.",
+    );
+  }
+  return persist;
+}
+
+function blankUser(telegramId: string, username: string | null): UserRow {
+  const now = new Date();
+  return {
+    telegram_id: telegramId,
+    username,
+    agent_status: "new",
+    evm_address: null,
+    sol_address: null,
+    evm_pk_enc: null,
+    sol_pk_enc: null,
+    promo_started_at: null,
+    created_at: now,
+    updated_at: now,
+  };
+}
 
 export interface UserRow {
   telegram_id: string;
@@ -20,6 +69,7 @@ export interface UserRow {
 }
 
 export async function migrate(): Promise<void> {
+  if (!(await canPersist())) return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       telegram_id TEXT PRIMARY KEY,
@@ -40,6 +90,17 @@ export async function upsertUser(
   telegramId: string,
   username: string | null,
 ): Promise<UserRow> {
+  if (!(await canPersist())) {
+    const existing = memory.get(telegramId);
+    if (existing) {
+      existing.username = username;
+      existing.updated_at = new Date();
+      return existing;
+    }
+    const created = blankUser(telegramId, username);
+    memory.set(telegramId, created);
+    return created;
+  }
   const { rows } = await pool.query<UserRow>(
     `INSERT INTO users (telegram_id, username)
      VALUES ($1, $2)
@@ -53,6 +114,7 @@ export async function upsertUser(
 }
 
 export async function getUser(telegramId: string): Promise<UserRow | null> {
+  if (!(await canPersist())) return memory.get(telegramId) ?? null;
   const { rows } = await pool.query<UserRow>(
     `SELECT * FROM users WHERE telegram_id = $1`,
     [telegramId],
@@ -69,6 +131,18 @@ export async function saveGeneratedWallet(
     solPrivateKeyEnc: string;
   },
 ): Promise<UserRow> {
+  if (!(await canPersist())) {
+    const existing = memory.get(telegramId) ?? blankUser(telegramId, null);
+    existing.evm_address = wallet.evmAddress;
+    existing.sol_address = wallet.solAddress;
+    existing.evm_pk_enc = wallet.evmPrivateKeyEnc;
+    existing.sol_pk_enc = wallet.solPrivateKeyEnc;
+    existing.agent_status = "wallet_ready";
+    existing.promo_started_at = existing.promo_started_at ?? new Date();
+    existing.updated_at = new Date();
+    memory.set(telegramId, existing);
+    return existing;
+  }
   const { rows } = await pool.query<UserRow>(
     `UPDATE users SET
        evm_address = $2,
@@ -95,6 +169,14 @@ export async function setAgentStatus(
   telegramId: string,
   status: AgentStatus,
 ): Promise<void> {
+  if (!(await canPersist())) {
+    const existing = memory.get(telegramId);
+    if (existing) {
+      existing.agent_status = status;
+      existing.updated_at = new Date();
+    }
+    return;
+  }
   await pool.query(
     `UPDATE users SET agent_status = $2, updated_at = NOW() WHERE telegram_id = $1`,
     [telegramId, status],
