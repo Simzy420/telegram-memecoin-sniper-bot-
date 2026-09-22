@@ -3,6 +3,9 @@ node_modules
 .env
 data/trade-archives
 data/paper-desk.json
+data/durable.sqlite
+data/*.sqlite
+logs
 apps/web/dist
 **/.astro
 *.log

@@ -8,7 +8,15 @@ COPY packages/shared/package.json packages/shared/package.json
 RUN npm ci
 
 COPY . .
-RUN npm run build -w @snipr/shared && npm run build -w @snipr/bot
+RUN npm run build -w @snipr/shared && npm run build -w @snipr/bot \
+  && chmod +x apps/bot/docker-entrypoint.sh
 
 ENV NODE_ENV=production
-CMD ["npm", "run", "start", "-w", "@snipr/bot"]
+ENV NODE_OPTIONS=--disable-warning=ExperimentalWarning
+ENV PORT=7860
+ENV DATA_DIR=/data
+ENV LIVE_TRADING=false
+ENV LEARN_NIGHTLY=false
+EXPOSE 7860
+
+ENTRYPOINT ["sh", "apps/bot/docker-entrypoint.sh"]

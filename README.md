@@ -1,3 +1,13 @@
+---
+title: Big Brain Ape The MemeCoin Sniper
+emoji: 🦍
+colorFrom: yellow
+colorTo: green
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Big Brain Ape The MemeCoin Sniper
 
 Telegram memecoin desk. One BotFather bot, one chat.
@@ -24,7 +34,7 @@ The runnable bot is the TypeScript grammY app in `apps/bot`. `main.py` is an unf
 
 `LIVE_TRADING` defaults to `false`. Scout can show drill names (`PAPERPEPE`, `RUGPUP`, `SLEEPAPE`) or a read-only DexScreener profile feed. With `HELIUS_API_KEY`, Shield also reads Solana mint and freeze authorities. With `ALCHEMY_API_KEY`, Shield checks that an EVM contract has bytecode.
 
-Sniper records a paper clip in Ledger. **This build never signs and never broadcasts**, including when `LIVE_TRADING=true`. That flag only changes the warning so a live request cannot silently turn into a transaction. Chain snipes stay a later engine.
+Sniper records a paper clip in Ledger. **This build never signs and never broadcasts.** Live mode arms only when `LIVE_TRADING` is the exact string `true`, `LIVE_TRADING_CONFIRM` is `I_UNDERSTAND`, and `WALLET_ENCRYPTION_KEY` is a real backed-up secret. Even then the live path is a stub: it runs safety checks and refuses the order. The unfinished Python executor returns the same refusal before any quote or signature.
 
 `OPENAI_API_KEY` is optional. It may rewrite free-form chat color. Fills, verdicts, and the journal do not depend on it.
 
@@ -62,6 +72,8 @@ Then talk in plain text:
 - `ledger` or `/paper` — the book
 - `close SLEEPAPE` — flat paper exit (no mark-to-market feed yet)
 - `/pulse` — tape read
+- `/learn` — Ledger summarizes the journal (win rate, expectancy, Shield blocks, top and bottom names). Empty books stay empty.
+- `/export` — CSV and JSONL of that chat's journal for a backtest
 - `/help` — the same list inside Telegram
 
 Wallet buttons (generate, deposit, export, activate) are still on the Start keyboard. Activate arms the Phase 1 flag after the portfolio minimum. It does not start live snipes.
@@ -76,13 +88,67 @@ Railway is the path to use. Long polling does not need a public webhook URL. The
    - `TELEGRAM_BOT_TOKEN` — BotFather token for `@Big_Brain_Ape_Bot`
    - `BOT_NAME` — `Big Brain Ape The MemeCoin Sniper`
    - `LIVE_TRADING` — `false`
+   - `LIVE_TRADING_CONFIRM` — leave empty
    - `OPENAI_API_KEY`, `HELIUS_API_KEY`, `ALCHEMY_API_KEY` — optional
-   - `WALLET_ENCRYPTION_KEY` — long random string before anyone deposits
+   - `WALLET_ENCRYPTION_KEY` — 32+ random characters from `openssl rand -base64 32`, backed up offline, before anyone deposits
    - `DATABASE_URL` — optional Railway Postgres for wallet rows
+   - `DATA_DIR` — optional volume path. SQLite defaults to `$DATA_DIR/durable.sqlite`
 4. Deploy. Logs should show `paper mode` and `polling`.
 5. In Telegram, send `/start` to [@Big_Brain_Ape_Bot](https://t.me/Big_Brain_Ape_Bot). Hire, watch, and snipe `SLEEPAPE`. Ledger should show a paper clip and the wallet should be unchanged on-chain.
 
-Do not set `LIVE_TRADING=true` expecting orders. The process will warn and keep the desk on paper.
+Do not set `LIVE_TRADING=true` expecting orders. Without the confirm phrase and a real encryption key the desk stays on paper. With all three set, the stub still refuses to sign.
+
+## Paper → journal → learn → later live
+
+1. **Paper.** Leave `LIVE_TRADING=false`. Hire the troop and snipe a drill name. Sniper writes a paper clip only after Shield. Prices that were not observed stay null. PnL stays 0 until a mark feed exists, and `/learn` does not treat those flat closes as wins.
+2. **Journal.** Every Scout, Shield, Sniper, Pulse, and Ledger action appends one JSONL row under `logs/days/YYYY-MM-DD/events.jsonl` (or `$DATA_DIR/logs/days/...` when `DATA_DIR` or `/data` is in use). The same row is inserted into SQLite at `data/durable.sqlite` (or `$DATA_DIR/durable.sqlite`). Fields: timestamp, session id, user id, agent, action, symbol, chain, size, price, pnl, shield reasons, tags, `paper` or `live`. Private-key shaped text is dropped and not written.
+3. **Learn.** `/learn` reads that chat's rows and reports win rate, expectancy, Shield block accuracy, and top/bottom symbols and strategies. A Shield block is scored only when a later realised close on that symbol has non-zero PnL. `/export` or `npm run export:journal` writes CSV and JSONL. Set `LEARN_NIGHTLY=true` and `LEARN_CHAT_ID` for an optional UTC midnight summary of the previous day. An empty day sends nothing.
+4. **Later live.** Arming requires `LIVE_TRADING=true`, `LIVE_TRADING_CONFIRM=I_UNDERSTAND`, and a backed-up `WALLET_ENCRYPTION_KEY`. The order path still returns `broadcast: false` and no transaction id. Do not point real size at this build.
+
+Paper wallets (cash, open clips) are in the same SQLite file, so a process restart keeps the book. Encrypted on-chain wallet rows stay in Postgres when `DATABASE_URL` connects. When Postgres is down they fall back to the same SQLite file. The ciphertext is useless without the encryption key, and the key is never printed.
+
+## Hugging Face Space
+
+Space: [Simzy/big-brain-ape-bot](https://huggingface.co/spaces/Simzy/big-brain-ape-bot). Docker, port 7860. Keep the hardware on a non-sleeping CPU upgrade so the bot stays up.
+
+The image sets `DATA_DIR=/data`, `PORT=7860`, and `LIVE_TRADING=false`. It does not set an encryption key or the confirm phrase.
+
+| Variable | Space value |
+| --- | --- |
+| `TELEGRAM_BOT_TOKEN` | BotFather token. Never commit it. |
+| `BOT_NAME` | `Big Brain Ape The MemeCoin Sniper` |
+| `LIVE_TRADING` | `false` |
+| `LIVE_TRADING_CONFIRM` | empty |
+| `WALLET_ENCRYPTION_KEY` | backed-up 32+ character secret, Space secret, not the README |
+| `DATA_DIR` | `/data` |
+| `WEBHOOK_URL` | `https://<space-host>/telegram/webhook` |
+| `WEBHOOK_SECRET` | optional, Space secret |
+| `LEARN_NIGHTLY` | `false` unless you want the midnight summary |
+| `LEARN_CHAT_ID` | operator chat, only if nightly is on |
+| `OPENAI_API_KEY`, `HELIUS_API_KEY`, `ALCHEMY_API_KEY` | optional |
+
+`/data` is ephemeral until storage is attached. A coordinator with a Hugging Face token can attach it. Do not put the token in the repo.
+
+Legacy persistent disk (older Spaces), mounted at `/data`:
+
+```text
+POST https://huggingface.co/api/spaces/Simzy/big-brain-ape-bot/storage
+Authorization: Bearer $HF_TOKEN
+{"tier":"small"}
+```
+
+Current Storage Bucket volume, also mounted at `/data`:
+
+```python
+from huggingface_hub import HfApi, Volume
+
+HfApi().set_space_volumes(
+    "Simzy/big-brain-ape-bot",
+    [Volume(type="bucket", source="Simzy/<bucket>", mount_path="/data")],
+)
+```
+
+Create the bucket first. This environment does not call that API. After merge, redeploy the Space from this Dockerfile so the journal path and webhook server are what the Space runs.
 
 ## Wallet path
 
@@ -115,5 +181,6 @@ main.py           Unfinished Python stub — not the desk
 | `npm run dev:bot` | Build shared types and run the Telegram bot |
 | `npm run dev:web` | Run the docs site |
 | `npm run build` | Build shared, bot, and web |
-| `npm test` | Hero checks, welcome copy, desk, and handler smoke tests |
+| `npm test` | Hero checks, welcome copy, desk, journal, and handler smoke tests |
+| `npm run export:journal` | Write CSV and JSONL for the on-disk journal |
 | `npm run start -w @snipr/bot` | Run the compiled bot (used in Docker) |
