@@ -11,6 +11,10 @@ export const BTN = {
   portfolio: "📊 Portfolio",
   deploy: "🚀 Deploy Agent",
   claimBonus: "💰 Claim New User Bonus",
+  hire: "🦍 Hire Team",
+  watch: "👀 Watch Tape",
+  status: "📋 Desk Status",
+  paper: "📒 Paper Book",
 } as const;
 
 export function mainWalletKeyboard() {
@@ -27,7 +31,15 @@ export function mainWalletKeyboard() {
 }
 
 export function startKeyboard(funded: boolean) {
-  const kb = new Keyboard().text(BTN.deploy).row().text(BTN.claimBonus);
+  const kb = new Keyboard()
+    .text(BTN.hire)
+    .text(BTN.watch)
+    .row()
+    .text(BTN.status)
+    .text(BTN.paper)
+    .row()
+    .text(BTN.deploy)
+    .text(BTN.claimBonus);
   if (funded) {
     kb.row().text(BTN.activate);
   }

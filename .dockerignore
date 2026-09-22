@@ -1,0 +1,8 @@
+node_modules
+.git
+.env
+data/trade-archives
+data/paper-desk.json
+apps/web/dist
+**/.astro
+*.log

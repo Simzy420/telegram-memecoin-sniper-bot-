@@ -8,5 +8,6 @@ apps/web/dist
 
 # Live daily trade archives (UTC day folders). Schema + EXAMPLE live under docs/.
 data/trade-archives/
+data/paper-desk.json
 __pycache__/
 *.pyc
