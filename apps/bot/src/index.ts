@@ -4,6 +4,7 @@ import { assertRuntimeConfig, config } from "./config.js";
 import { migrate, userStoreKind } from "./db/users.js";
 import { registerHandlers } from "./handlers/commands.js";
 import { startNightlyLearn } from "./team/nightly.js";
+import { isLearnPollPath, writeLearnPoll } from "./team/learn-http.js";
 import { durableDbPath, journalRoot } from "./team/paths.js";
 
 const COMMANDS = [
@@ -58,6 +59,10 @@ function listenHttp(bot: Bot | null): void {
             res.end("error");
           }
         });
+        return;
+      }
+      if (req.method === "GET" && isLearnPollPath(pathname)) {
+        writeLearnPoll(req, res);
         return;
       }
       if (req.method === "GET" && (pathname === "/" || pathname === "/health")) {
