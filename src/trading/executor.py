@@ -31,6 +31,7 @@ from src.trading.wallet import WalletManager
 from src.trading.position import Position, PositionTracker, PositionStatus
 from src.analytics.tracker import AnalyticsTracker
 from src.archives.writer import TradeArchiveWriter
+from src.trading.live_gate import broadcast_refusal
 
 # --------------------------------------------------------------------------- #
 # Configuration
@@ -168,8 +169,23 @@ class TradeExecutor:
 
         If *amount_sol* is ``None`` the executor calculates a position size
         based on the user's tier and safety score.
+
+        This build returns before any quote or signature. Funds cannot move.
         """
-        # 0 — Safety gate
+        refusal = broadcast_refusal()
+        return TradeResult(
+            success=False,
+            user_id=user_id,
+            token_address=token_address,
+            token_symbol=token_symbol,
+            side="buy",
+            amount_sol=0,
+            price_usd=0,
+            quantity=0,
+            error=refusal,
+        )
+
+        # 0 — Safety gate (unreachable until a future broadcaster replaces the refusal above)
         if not safety.safe:
             result = TradeResult(
                 success=False, user_id=user_id,
@@ -272,7 +288,23 @@ class TradeExecutor:
         position_id: str,
         reason: str = "manual",
     ) -> TradeResult:
-        """Execute a sell (close position) through Jupiter."""
+        """Execute a sell (close position) through Jupiter.
+
+        This build returns before any quote or signature. Funds cannot move.
+        """
+        refusal = broadcast_refusal()
+        return TradeResult(
+            success=False,
+            user_id=user_id,
+            token_address="",
+            token_symbol="",
+            side="sell",
+            amount_sol=0,
+            price_usd=0,
+            quantity=0,
+            error=refusal,
+        )
+
         pos = self.positions.get_position(position_id)
         if pos is None:
             return TradeResult(

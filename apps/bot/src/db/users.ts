@@ -1,6 +1,15 @@
 import pg from "pg";
 import type { AgentStatus } from "@snipr/shared";
 import { config } from "../config.js";
+import {
+  getStoredUser,
+  openDurable,
+  saveStoredWallet,
+  setStoredAgentStatus,
+  upsertStoredUser,
+  type StoredUser,
+} from "./durable.js";
+import { durableDbPath } from "../team/paths.js";
 
 const { Pool } = pg;
 
@@ -15,28 +24,49 @@ pool.on("error", (err) => {
 });
 
 const memory = new Map<string, UserRow>();
-let persist: boolean | null = null;
+let store: "postgres" | "sqlite" | "memory" | null = null;
 
-export function userStoreKind(): "postgres" | "memory" {
-  return persist === true ? "postgres" : "memory";
+export function userStoreKind(): "postgres" | "sqlite" | "memory" {
+  return store ?? "memory";
+}
+
+export function resetUserStoreForTests(): void {
+  store = null;
+  memory.clear();
+}
+
+async function resolveStore(): Promise<"postgres" | "sqlite" | "memory"> {
+  if (store) return store;
+  if (process.env.SKIP_DATABASE === "1") {
+    store = "memory";
+    return store;
+  }
+  if (process.env.FORCE_DURABLE_SQLITE === "1") {
+    store = "sqlite";
+    return store;
+  }
+  try {
+    await pool.query("SELECT 1");
+    store = "postgres";
+  } catch {
+    if (process.env.SKIP_SQLITE === "1") {
+      store = "memory";
+      console.warn(
+        "[bba] Postgres unavailable — user records stay in memory for this process.",
+      );
+    } else {
+      store = "sqlite";
+      console.warn(
+        `[bba] Postgres unavailable — user wallets and the paper book use SQLite at ${durableDbPath()}.`,
+      );
+    }
+  }
+  return store;
 }
 
 async function canPersist(): Promise<boolean> {
-  if (process.env.SKIP_DATABASE === "1") {
-    persist = false;
-    return false;
-  }
-  if (persist !== null) return persist;
-  try {
-    await pool.query("SELECT 1");
-    persist = true;
-  } catch {
-    persist = false;
-    console.warn(
-      "[bba] Postgres unavailable — user records stay in memory for this process.",
-    );
-  }
-  return persist;
+  const kind = await resolveStore();
+  return kind === "postgres";
 }
 
 function blankUser(telegramId: string, username: string | null): UserRow {
@@ -69,7 +99,12 @@ export interface UserRow {
 }
 
 export async function migrate(): Promise<void> {
-  if (!(await canPersist())) return;
+  const kind = await resolveStore();
+  if (kind === "sqlite") {
+    openDurable(durableDbPath());
+    return;
+  }
+  if (kind !== "postgres") return;
   await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       telegram_id TEXT PRIMARY KEY,
@@ -86,10 +121,29 @@ export async function migrate(): Promise<void> {
   `);
 }
 
+function fromStored(row: StoredUser): UserRow {
+  return {
+    telegram_id: row.telegram_id,
+    username: row.username,
+    agent_status: row.agent_status as AgentStatus,
+    evm_address: row.evm_address,
+    sol_address: row.sol_address,
+    evm_pk_enc: row.evm_pk_enc,
+    sol_pk_enc: row.sol_pk_enc,
+    promo_started_at: row.promo_started_at ? new Date(row.promo_started_at) : null,
+    created_at: new Date(row.created_at),
+    updated_at: new Date(row.updated_at),
+  };
+}
+
 export async function upsertUser(
   telegramId: string,
   username: string | null,
 ): Promise<UserRow> {
+  if ((await resolveStore()) === "sqlite") {
+    const now = new Date().toISOString();
+    return fromStored(upsertStoredUser(openDurable(durableDbPath()), telegramId, username, now));
+  }
   if (!(await canPersist())) {
     const existing = memory.get(telegramId);
     if (existing) {
@@ -114,6 +168,10 @@ export async function upsertUser(
 }
 
 export async function getUser(telegramId: string): Promise<UserRow | null> {
+  if ((await resolveStore()) === "sqlite") {
+    const row = getStoredUser(openDurable(durableDbPath()), telegramId);
+    return row ? fromStored(row) : null;
+  }
   if (!(await canPersist())) return memory.get(telegramId) ?? null;
   const { rows } = await pool.query<UserRow>(
     `SELECT * FROM users WHERE telegram_id = $1`,
@@ -131,6 +189,12 @@ export async function saveGeneratedWallet(
     solPrivateKeyEnc: string;
   },
 ): Promise<UserRow> {
+  if ((await resolveStore()) === "sqlite") {
+    const now = new Date().toISOString();
+    return fromStored(
+      saveStoredWallet(openDurable(durableDbPath()), telegramId, wallet, now),
+    );
+  }
   if (!(await canPersist())) {
     const existing = memory.get(telegramId) ?? blankUser(telegramId, null);
     existing.evm_address = wallet.evmAddress;
@@ -169,6 +233,15 @@ export async function setAgentStatus(
   telegramId: string,
   status: AgentStatus,
 ): Promise<void> {
+  if ((await resolveStore()) === "sqlite") {
+    setStoredAgentStatus(
+      openDurable(durableDbPath()),
+      telegramId,
+      status,
+      new Date().toISOString(),
+    );
+    return;
+  }
   if (!(await canPersist())) {
     const existing = memory.get(telegramId);
     if (existing) {

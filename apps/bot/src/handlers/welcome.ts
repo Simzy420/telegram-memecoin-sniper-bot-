@@ -25,7 +25,8 @@ export function startWelcomeCopy(): string {
     `• *Desk Status* — who is on the desk, and the paper book\n\n` +
     `Say "scout", "shield check SLEEPAPE", "snipe SLEEPAPE", or "ledger".\n\n` +
     `The memecoin trading engine is *not live yet*. The desk defaults to paper. ` +
-    `LIVE_TRADING stays off unless you set it, and this build never broadcasts a transaction.\n\n` +
+    `Live mode arms only with LIVE_TRADING=true, LIVE_TRADING_CONFIRM=I_UNDERSTAND, and a backed-up WALLET_ENCRYPTION_KEY. ` +
+    `This build still never broadcasts a transaction. /learn reads the journal. /export dumps it.\n\n` +
     `*When you want a wallet*\n` +
     `1. Open the chat (done)\n` +
     `2. Generate a wallet and fund it\n` +

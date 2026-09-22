@@ -1,10 +1,10 @@
 import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from "node:crypto";
-import { config } from "../config.js";
+import { requireEncryptionKey } from "../security/key.js";
 
 const ALGO = "aes-256-gcm";
 
 function deriveKey(): Buffer {
-  return scryptSync(config.walletEncryptionKey, "snipr-wallet-v1", 32);
+  return scryptSync(requireEncryptionKey(), "snipr-wallet-v1", 32);
 }
 
 /** Encrypt a private key / secret for DB storage. */

@@ -6,6 +6,8 @@ import {
   type Discovery,
 } from "./candidates.js";
 import { executionGate } from "./gate.js";
+import type { JournalDraft } from "./journal.js";
+import { submitLiveOrder } from "./live.js";
 import { flavorChat } from "./openai.js";
 import {
   closePaperPosition,
@@ -13,21 +15,25 @@ import {
   freshDesk,
   hireTroop,
   openPaperPosition,
+  PAPER_CAUTION_USD,
+  PAPER_SIZE_USD,
   usd,
   type DeskState,
 } from "./paper.js";
 import { personaNameList, PERSONAS, SPECIALIST_IDS, type SpecialistId } from "./personas.js";
 import type { Line } from "./render.js";
 import { routeUserText } from "./router.js";
-import { formatShield, runShield } from "./safety.js";
+import { formatShield, runShield, type ShieldReport } from "./safety.js";
 
 const HELP =
   "Talk to me in this chat. The troop answers under their own names.\n" +
   "Hire Team — seat Scout, Sniper, Pulse, Ledger, and Shield.\n" +
   "Watch Tape — Scout lists names, Shield checks the first one, Pulse reads it.\n" +
   "Desk Status — who is hired, and that the book is paper.\n" +
+  "/learn — Ledger reads the journal: win rate, expectancy, Shield blocks. No invented fills.\n" +
+  "/export — dump the journal as CSV and JSONL for a backtest.\n" +
   "Try: scout, shield check SLEEPAPE, snipe SLEEPAPE, ledger, close SLEEPAPE.\n" +
-  "Commands: /hire /watch /status /paper /scout /sniper /pulse /ledger /shield";
+  "Commands: /hire /watch /status /paper /scout /sniper /pulse /ledger /shield /learn /export";
 
 export interface DeskTurnInput {
   text: string;
@@ -46,6 +52,7 @@ export interface DeskTurnInput {
 export interface DeskTurn {
   state: DeskState;
   lines: Line[];
+  events: JournalDraft[];
 }
 
 export function looksLikeSecret(text: string): boolean {
@@ -61,44 +68,44 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
   let state = input.state ?? freshDesk();
   const env = input.env ?? process.env;
   const gate = executionGate(env);
+  const events: JournalDraft[] = [];
+  const done = (next: DeskState, lines: Line[]): DeskTurn => ({
+    state: next,
+    lines,
+    events,
+  });
 
   if (looksLikeSecret(input.text)) {
-    return {
-      state,
-      lines: [
-        {
-          speaker: "boss",
-          text:
-            "That looks like a key. I will not repeat it or store it in the desk journal. Export keys only from the wallet menu, in a private chat.",
-        },
-      ],
-    };
+    return done(state, [
+      {
+        speaker: "boss",
+        text:
+          "That looks like a key. I will not repeat it or store it in the desk journal. Export keys only from the wallet menu, in a private chat.",
+      },
+    ]);
   }
 
   const route = routeUserText(input.text);
 
   if (route.intent === "hire") {
     state = hireTroop(state, at);
-    return {
-      state,
-      lines: [
-        {
-          speaker: "boss",
-          text: `Troop is hired. ${gate.detail}`,
-        },
-        ...SPECIALIST_IDS.map((id) => ({
-          speaker: id,
-          text: hireLine(id),
-        })),
-      ],
-    };
+    for (const id of SPECIALIST_IDS) {
+      events.push(draft(id, "hired", { tags: ["hire"] }));
+    }
+    return done(state, [
+      {
+        speaker: "boss",
+        text: `Troop is hired. ${gate.detail}`,
+      },
+      ...SPECIALIST_IDS.map((id) => ({
+        speaker: id,
+        text: hireLine(id),
+      })),
+    ]);
   }
 
   if (route.intent === "help") {
-    return {
-      state,
-      lines: [{ speaker: "boss", text: HELP }],
-    };
+    return done(state, [{ speaker: "boss", text: HELP }]);
   }
 
   if (route.intent === "status") {
@@ -106,26 +113,22 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
       state.hired.length === 0
         ? "Nobody is hired yet. Tap Hire Team."
         : `Hired: ${personaNameList(state.hired)}.`;
-    return {
-      state,
-      lines: [
-        {
-          speaker: "boss",
-          text: `${hired} Watching: ${state.watching ? "yes" : "no"}. ${gate.detail} ${providerLine(env)}`,
-        },
-        { speaker: "ledger", text: formatLedger(state) },
-      ],
-    };
+    events.push(draft("ledger", "book", { tags: ["book", "status"] }));
+    return done(state, [
+      {
+        speaker: "boss",
+        text: `${hired} Watching: ${state.watching ? "yes" : "no"}. ${gate.detail} ${providerLine(env)}`,
+      },
+      { speaker: "ledger", text: formatLedger(state) },
+    ]);
   }
 
   if (route.intent === "ledger") {
-    return {
-      state,
-      lines: [
-        { speaker: "boss", text: "Ledger has the paper book." },
-        { speaker: "ledger", text: formatLedger(state) },
-      ],
-    };
+    events.push(draft("ledger", "book", { tags: ["book"] }));
+    return done(state, [
+      { speaker: "boss", text: "Ledger has the paper book." },
+      { speaker: "ledger", text: formatLedger(state) },
+    ]);
   }
 
   if (route.intent === "discover" || route.intent === "watch" || route.intent === "pulse") {
@@ -146,154 +149,269 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
     ];
     if (route.intent !== "pulse") {
       lines.push({ speaker: "scout", text: formatScout(discovery) });
+      for (const candidate of discovery.candidates.slice(0, 8)) {
+        events.push(
+          draft("scout", "scan", {
+            symbol: candidate.symbol,
+            chain: candidate.chain,
+            tags: [`feed:${discovery.feed}`, "scan"],
+          }),
+        );
+      }
     }
     if (route.intent === "watch" && top) {
-      lines.push({ speaker: "shield", text: formatShield(runShield(top)) });
+      const report = runShield(top);
+      lines.push({ speaker: "shield", text: formatShield(report) });
+      events.push(shieldDraft(top, report));
     }
     if (route.intent === "watch" || route.intent === "pulse") {
       lines.push({
         speaker: "pulse",
         text: top ? pulseRead(top) : "No names on the board. Ask Scout to look again.",
       });
+      events.push(
+        draft("pulse", "tape", {
+          symbol: top?.symbol ?? null,
+          chain: top?.chain ?? null,
+          tags: ["tape"],
+        }),
+      );
     }
-    return { state, lines };
+    return done(state, lines);
   }
 
   if (route.intent === "safety") {
     const found = await resolveCandidate(route.symbol, state, input);
     state = found.state;
     if (!found.candidate) {
-      return {
-        state,
-        lines: [
-          {
-            speaker: "boss",
-            text: "Shield needs a name from the tape. Watch first, or say shield check SLEEPAPE.",
-          },
-          {
-            speaker: "shield",
-            text: "I do not invent a checklist for a symbol I have not seen.",
-          },
-        ],
-      };
-    }
-    return {
-      state,
-      lines: [
+      return done(state, [
         {
           speaker: "boss",
-          text: `Shield is on ${found.candidate.symbol}. This is a checklist, not a buy.`,
+          text: "Shield needs a name from the tape. Watch first, or say shield check SLEEPAPE.",
         },
-        { speaker: "shield", text: formatShield(runShield(found.candidate)) },
-      ],
-    };
+        {
+          speaker: "shield",
+          text: "I do not invent a checklist for a symbol I have not seen.",
+        },
+      ]);
+    }
+    const report = runShield(found.candidate);
+    events.push(shieldDraft(found.candidate, report));
+    return done(state, [
+      {
+        speaker: "boss",
+        text: `Shield is on ${found.candidate.symbol}. This is a checklist, not a buy.`,
+      },
+      { speaker: "shield", text: formatShield(report) },
+    ]);
   }
 
   if (route.intent === "snipe") {
     if (state.hired.length === 0) {
-      return {
-        state,
-        lines: [
-          {
-            speaker: "boss",
-            text: "Hire the troop before anyone marks a paper fill.",
-          },
-        ],
-      };
+      return done(state, [
+        {
+          speaker: "boss",
+          text: "Hire the troop before anyone marks a paper fill.",
+        },
+      ]);
     }
     if (!route.symbol) {
-      return {
-        state,
-        lines: [
-          {
-            speaker: "boss",
-            text: "Sniper needs a symbol from the tape. Try snipe SLEEPAPE.",
-          },
-          {
-            speaker: "sniper",
-            text: "No target. I do not fire blind, even on paper.",
-          },
-        ],
-      };
+      return done(state, [
+        {
+          speaker: "boss",
+          text: "Sniper needs a symbol from the tape. Try snipe SLEEPAPE.",
+        },
+        {
+          speaker: "sniper",
+          text: "No target. I do not fire blind, even on paper.",
+        },
+      ]);
     }
     const found = await resolveCandidate(route.symbol, state, input);
     state = found.state;
     if (!found.candidate) {
-      return {
-        state,
-        lines: [
-          {
-            speaker: "boss",
-            text: `${route.symbol} is not on the example tape or the last watch. Ask Scout, or use PAPERPEPE, RUGPUP, or SLEEPAPE.`,
-          },
-          {
-            speaker: "sniper",
-            text: "I will not invent a mint. No paper fill.",
-          },
-        ],
-      };
+      return done(state, [
+        {
+          speaker: "boss",
+          text: `${route.symbol} is not on the example tape or the last watch. Ask Scout, or use PAPERPEPE, RUGPUP, or SLEEPAPE.`,
+        },
+        {
+          speaker: "sniper",
+          text: "I will not invent a mint. No paper fill.",
+        },
+      ]);
     }
     const report = runShield(found.candidate);
+    events.push(shieldDraft(found.candidate, report));
+    if (gate.liveEnabled) {
+      const size = report.verdict === "caution" ? PAPER_CAUTION_USD : PAPER_SIZE_USD;
+      const live = submitLiveOrder(
+        {
+          symbol: found.candidate.symbol,
+          chain: found.candidate.chain,
+          side: "buy",
+          sizeUsd: size,
+          shieldVerdict: report.verdict,
+        },
+        env,
+      );
+      events.push(
+        draft("sniper", "live_refused", {
+          symbol: found.candidate.symbol,
+          chain: found.candidate.chain,
+          size: report.verdict === "block" ? null : size,
+          shieldReasons: shieldReasonList(report),
+          tags: ["stub", "no-broadcast", `verdict:${report.verdict}`, strategyTag(report.verdict)],
+          mode: "live",
+        }),
+      );
+      return done(state, [
+        {
+          speaker: "boss",
+          text: `Sniper asked for ${found.candidate.symbol}. The live path refused it. ${gate.detail}`,
+        },
+        { speaker: "shield", text: formatShield(report) },
+        { speaker: "sniper", text: live.reason },
+        { speaker: "ledger", text: formatLedger(state) },
+      ]);
+    }
     const opened = openPaperPosition(state, found.candidate, report.verdict, at);
     state = opened.state;
-    const isNewFill =
-      opened.position != null && opened.reason === opened.position.note;
+    const isNewFill = opened.position != null && opened.reason === opened.position.note;
+    if (isNewFill && opened.position) {
+      events.push(
+        draft("sniper", "paper_fill", {
+          symbol: opened.position.symbol,
+          chain: opened.position.chain,
+          size: opened.position.sizeUsd,
+          pnl: null,
+          shieldReasons: shieldReasonList(report),
+          tags: ["fill", `verdict:${report.verdict}`, strategyTag(report.verdict)],
+        }),
+      );
+      events.push(
+        draft("ledger", "book", {
+          symbol: opened.position.symbol,
+          chain: opened.position.chain,
+          size: opened.position.sizeUsd,
+          tags: ["book", "position_opened"],
+        }),
+      );
+    } else {
+      events.push(
+        draft("sniper", "refused", {
+          symbol: found.candidate.symbol,
+          chain: found.candidate.chain,
+          shieldReasons: shieldReasonList(report),
+          tags: ["refused", `verdict:${report.verdict}`],
+        }),
+      );
+    }
     const sniperText = isNewFill
       ? `Paper entry ${found.candidate.symbol} ${usd(opened.position!.sizeUsd)} on ${found.candidate.chain}. ${opened.position!.note} ${gate.detail}`
       : `${opened.reason} ${gate.detail}`;
-    return {
-      state,
-      lines: [
-        {
-          speaker: "boss",
-          text: `Sniper asked for ${found.candidate.symbol}. Shield speaks before any paper clip. ${gate.detail}`,
-        },
-        { speaker: "shield", text: formatShield(report) },
-        { speaker: "sniper", text: sniperText },
-        { speaker: "ledger", text: formatLedger(state) },
-      ],
-    };
+    return done(state, [
+      {
+        speaker: "boss",
+        text: `Sniper asked for ${found.candidate.symbol}. Shield speaks before any paper clip. ${gate.detail}`,
+      },
+      { speaker: "shield", text: formatShield(report) },
+      { speaker: "sniper", text: sniperText },
+      { speaker: "ledger", text: formatLedger(state) },
+    ]);
   }
 
   if (route.intent === "close") {
     if (!route.symbol) {
-      return {
-        state,
-        lines: [
-          { speaker: "boss", text: "Name the paper position to close. Example: close SLEEPAPE." },
-        ],
-      };
+      return done(state, [
+        { speaker: "boss", text: "Name the paper position to close. Example: close SLEEPAPE." },
+      ]);
     }
     const closed = closePaperPosition(state, route.symbol, at);
     state = closed.state;
     if (!closed.closed) {
-      return {
-        state,
-        lines: [
-          { speaker: "boss", text: `No open paper position named ${route.symbol}.` },
-          { speaker: "ledger", text: formatLedger(state) },
-        ],
-      };
-    }
-    return {
-      state,
-      lines: [
-        {
-          speaker: "boss",
-          text: `Closing ${closed.closed.symbol} on paper. ${gate.detail}`,
-        },
-        {
-          speaker: "sniper",
-          text: `Paper exit ${closed.closed.symbol}. I did not send a transaction.`,
-        },
+      events.push(draft("ledger", "book", { symbol: route.symbol, tags: ["book", "missing"] }));
+      return done(state, [
+        { speaker: "boss", text: `No open paper position named ${route.symbol}.` },
         { speaker: "ledger", text: formatLedger(state) },
-      ],
-    };
+      ]);
+    }
+    const strategy = closed.closed.note.toLowerCase().includes("caution")
+      ? "strategy:caution-clip"
+      : "strategy:paper-clip";
+    events.push(
+      draft("sniper", "paper_close", {
+        symbol: closed.closed.symbol,
+        chain: closed.closed.chain,
+        size: closed.closed.sizeUsd,
+        pnl: closed.closed.pnlUsd,
+        tags: ["outcome:realised", strategy],
+      }),
+    );
+    events.push(
+      draft("ledger", "book", {
+        symbol: closed.closed.symbol,
+        chain: closed.closed.chain,
+        size: closed.closed.sizeUsd,
+        pnl: closed.closed.pnlUsd,
+        tags: ["book", "position_closed"],
+      }),
+    );
+    return done(state, [
+      {
+        speaker: "boss",
+        text: `Closing ${closed.closed.symbol} on paper. ${gate.detail}`,
+      },
+      {
+        speaker: "sniper",
+        text: `Paper exit ${closed.closed.symbol}. I did not send a transaction.`,
+      },
+      { speaker: "ledger", text: formatLedger(state) },
+    ]);
   }
 
   const chat = chatLines(route.specialists);
   const flavored = await flavorChat(chat, env.OPENAI_API_KEY, input.fetchImpl);
-  return { state, lines: flavored ?? chat };
+  return done(state, flavored ?? chat);
+}
+
+function draft(
+  agent: SpecialistId,
+  action: string,
+  extra: Omit<JournalDraft, "agent" | "action"> = {},
+): JournalDraft {
+  return {
+    agent,
+    action,
+    symbol: extra.symbol ?? null,
+    chain: extra.chain ?? null,
+    size: extra.size ?? null,
+    price: extra.price ?? null,
+    pnl: extra.pnl ?? null,
+    shieldReasons: extra.shieldReasons ?? [],
+    tags: extra.tags ?? [],
+    mode: extra.mode ?? "paper",
+  };
+}
+
+function shieldDraft(candidate: Candidate, report: ShieldReport): JournalDraft {
+  return draft("shield", "check", {
+    symbol: candidate.symbol,
+    chain: candidate.chain,
+    shieldReasons: shieldReasonList(report),
+    tags: ["check", `verdict:${report.verdict}`],
+  });
+}
+
+function shieldReasonList(report: ShieldReport): string[] {
+  return [
+    `verdict:${report.verdict}`,
+    ...report.flags.map((flag) => `${flag.status} ${flag.label}: ${flag.detail}`),
+  ];
+}
+
+function strategyTag(verdict: ShieldReport["verdict"]): string {
+  return verdict === "caution" ? "strategy:caution-clip" : "strategy:paper-clip";
 }
 
 function providerLine(env: Record<string, string | undefined>): string {

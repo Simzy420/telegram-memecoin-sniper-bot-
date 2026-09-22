@@ -8,6 +8,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "tsx --test test/**/*.test.ts",
+    "export:journal": "tsx src/export-cli.ts",
     "start": "node dist/index.js"
   },
   "dependencies": {

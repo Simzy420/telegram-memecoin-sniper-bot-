@@ -10,7 +10,8 @@
     "dev:web": "npm run dev -w @snipr/web",
     "build": "npm run build -w @snipr/shared && npm run build -w @snipr/bot && npm run build -w @snipr/web",
     "typecheck": "npm run build -w @snipr/shared && npm run typecheck -w @snipr/shared && npm run typecheck -w @snipr/bot",
-    "test": "npm run build -w @snipr/shared && npm run test -w @snipr/web && npm run test -w @snipr/bot"
+    "test": "npm run build -w @snipr/shared && npm run test -w @snipr/web && npm run test -w @snipr/bot",
+    "export:journal": "npm run export:journal -w @snipr/bot"
   },
   "engines": {
     "node": ">=20"
