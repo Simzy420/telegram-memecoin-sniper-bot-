@@ -1,4 +1,6 @@
 import "dotenv/config";
+import { isRealEncryptionKey } from "./security/key.js";
+import { executionGate } from "./team/gate.js";
 
 function required(name: string): string {
   const value = process.env[name];
@@ -43,14 +45,14 @@ export const config = {
   openaiApiKey: process.env.OPENAI_API_KEY ?? "",
   heliusApiKey: process.env.HELIUS_API_KEY ?? "",
   alchemyApiKey: process.env.ALCHEMY_API_KEY ?? "",
-  /** Exact string "true" opts into the live flag. This build still does not broadcast. */
+  /** Exact string "true" is only the first live latch. Confirm + encryption key must also match. */
   liveTrading: process.env.LIVE_TRADING === "true",
+  liveTradingConfirm: process.env.LIVE_TRADING_CONFIRM ?? "",
   telegramUsername: process.env.TELEGRAM_BOT_USERNAME ?? "",
   websiteUrl: process.env.WEBSITE_URL ?? "http://localhost:4321",
   docsUrl: process.env.DOCS_URL ?? "http://localhost:4321/docs",
   channelUrl: process.env.CHANNEL_URL ?? "",
-  walletEncryptionKey:
-    process.env.WALLET_ENCRYPTION_KEY ?? "dev-only-change-me-now-32chars!!",
+  walletEncryptionKey: process.env.WALLET_ENCRYPTION_KEY ?? "",
   databaseUrl:
     process.env.DATABASE_URL ??
     "postgres://snipr:snipr@localhost:5432/snipr",
@@ -75,18 +77,15 @@ export function assertRuntimeConfig(): void {
       "[snipr] TELEGRAM_BOT_TOKEN is empty — bot will not poll until set.",
     );
   }
-  if (config.walletEncryptionKey.includes("change-me")) {
+  if (!isRealEncryptionKey(process.env.WALLET_ENCRYPTION_KEY)) {
     console.warn(
-      "[snipr] WALLET_ENCRYPTION_KEY is still a placeholder. Do not use with real funds.",
-    );
-  }
-  if (config.liveTrading) {
-    console.warn(
-      "[bba] LIVE_TRADING=true but this build has no broadcaster. Desk stays on paper.",
+      "[bba] WALLET_ENCRYPTION_KEY is missing or a placeholder. Wallet encryption and the live gate stay closed. Back up a real key before any deposit.",
     );
   } else {
-    console.log("[bba] paper mode (LIVE_TRADING is not true).");
+    console.log("[bba] WALLET_ENCRYPTION_KEY is set. Value not printed.");
   }
+  const gate = executionGate(process.env);
+  console.log(`[bba] ${gate.modeLabel} broadcast=false. ${gate.detail}`);
 }
 
 // Keep required() available for stricter boot later

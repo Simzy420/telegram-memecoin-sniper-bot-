@@ -214,7 +214,13 @@ class WalletManager:
 
         Returns the transaction signature on success.
         Raises ``RuntimeError`` if no custodial keypair is available.
+
+        This build raises before any signature or RPC broadcast.
         """
+        from src.trading.live_gate import broadcast_refusal
+
+        raise RuntimeError(broadcast_refusal())
+
         kp = self.get_keypair(user_id)
         if kp is None:
             raise RuntimeError(

@@ -11,6 +11,7 @@ import {
   formatPortfolioLines,
   loadPortfolio,
 } from "../services/balances.js";
+import { isRealEncryptionKey } from "../security/key.js";
 import { decryptSecret } from "../services/crypto.js";
 import { generateUserWallet } from "../services/wallet.js";
 import {
@@ -103,6 +104,13 @@ export function registerHandlers(bot: Bot): void {
       return;
     }
 
+    if (!isRealEncryptionKey(process.env.WALLET_ENCRYPTION_KEY)) {
+      await ctx.reply(
+        "Wallet encryption is not configured. Set WALLET_ENCRYPTION_KEY to a backed-up secret of at least 32 characters before generating a wallet. Placeholder keys are refused, and no key was stored.",
+        { reply_markup: mainWalletKeyboard() },
+      );
+      return;
+    }
     const wallet = generateUserWallet();
     const saved = await saveGeneratedWallet(String(ctx.from!.id), wallet);
     await ctx.reply(
@@ -179,8 +187,18 @@ export function registerHandlers(bot: Bot): void {
       await ctx.answerCallbackQuery({ text: "No wallet" });
       return;
     }
-    const evmPk = decryptSecret(user.evm_pk_enc);
-    const solPk = decryptSecret(user.sol_pk_enc);
+    let evmPk: string;
+    let solPk: string;
+    try {
+      evmPk = decryptSecret(user.evm_pk_enc);
+      solPk = decryptSecret(user.sol_pk_enc);
+    } catch {
+      await ctx.answerCallbackQuery({ text: "Cannot decrypt" });
+      await ctx.reply(
+        "Could not decrypt this wallet. The encryption key on this host does not match the key used when the wallet was stored. No secret was printed.",
+      );
+      return;
+    }
     await ctx.answerCallbackQuery();
     await ctx.reply(
       `*EVM private key:*\n\`${evmPk}\`\n\n` +
