@@ -80,7 +80,7 @@ Wallet buttons (generate, deposit, export, activate) are still on the Start keyb
 
 ## Deploy on Railway
 
-Railway is the path to use. Long polling does not need a public webhook URL. The container listens on `PORT` (Railway sets it) at `/health` and polls Telegram.
+Railway is the path to use. Long polling does not need a public webhook URL. The container listens on `PORT` (Railway sets it) at `/health` and polls Telegram. `GET /api/learn` is the journal poll when `LEARN_HTTP_SECRET` is set.
 
 1. Push this repo and open [Railway](https://railway.app).
 2. New project → Deploy from GitHub → this repository. Railway reads `railway.toml` and builds the `Dockerfile`.
@@ -93,6 +93,7 @@ Railway is the path to use. Long polling does not need a public webhook URL. The
    - `WALLET_ENCRYPTION_KEY` — 32+ random characters from `openssl rand -base64 32`, backed up offline, before anyone deposits
    - `DATABASE_URL` — optional Railway Postgres for wallet rows
    - `DATA_DIR` — optional volume path. SQLite defaults to `$DATA_DIR/durable.sqlite`
+   - `LEARN_HTTP_SECRET` — optional bearer for `GET /api/learn`. Leave unset to keep the poll off (`503`)
 4. Deploy. Logs should show `paper mode` and `polling`.
 5. In Telegram, send `/start` to [@Big_Brain_Ape_Bot](https://t.me/Big_Brain_Ape_Bot). Hire, watch, and snipe `SLEEPAPE`. Ledger should show a paper clip and the wallet should be unchanged on-chain.
 
@@ -103,6 +104,9 @@ Do not set `LIVE_TRADING=true` expecting orders. Without the confirm phrase and 
 1. **Paper.** Leave `LIVE_TRADING=false`. Hire the troop and snipe a drill name. Sniper writes a paper clip only after Shield. Prices that were not observed stay null. PnL stays 0 until a mark feed exists, and `/learn` does not treat those flat closes as wins.
 2. **Journal.** Every Scout, Shield, Sniper, Pulse, and Ledger action appends one JSONL row under `logs/days/YYYY-MM-DD/events.jsonl` (or `$DATA_DIR/logs/days/...` when `DATA_DIR` or `/data` is in use). The same row is inserted into SQLite at `data/durable.sqlite` (or `$DATA_DIR/durable.sqlite`). Fields: timestamp, session id, user id, agent, action, symbol, chain, size, price, pnl, shield reasons, tags, `paper` or `live`. Private-key shaped text is dropped and not written.
 3. **Learn.** `/learn` reads that chat's rows and reports win rate, expectancy, Shield block accuracy, and top/bottom symbols and strategies. A Shield block is scored only when a later realised close on that symbol has non-zero PnL. `/export` or `npm run export:journal` writes CSV and JSONL. Set `LEARN_NIGHTLY=true` and `LEARN_CHAT_ID` for an optional UTC midnight summary of the previous day. An empty day sends nothing.
+
+   `GET /api/learn` (alias `GET /learn`) returns that same summary as JSON. Send `Authorization: Bearer <LEARN_HTTP_SECRET>`. An unset or blank secret answers `503` with a short plain message. A missing or wrong bearer answers `401`. The secret is not logged or echoed. Optional query `userId` filters to that Telegram user, the same way in-chat `/learn` does. Omit `userId` for an operator digest of every journal row (`scope` is `all`, `userId` is null). The body is `{ ok, empty, text, summary, scope, userId, generatedAt }`. `text` is the exact `/learn` summary. `empty` is true when there are no rows, including when the journal is not being persisted. Grok Bot can schedule a poll against `https://simzy-big-brain-ape-bot.hf.space/api/learn`.
+
 4. **Later live.** Arming requires `LIVE_TRADING=true`, `LIVE_TRADING_CONFIRM=I_UNDERSTAND`, and a backed-up `WALLET_ENCRYPTION_KEY`. The order path still returns `broadcast: false` and no transaction id. Do not point real size at this build.
 
 Paper wallets (cash, open clips) are in the same SQLite file, so a process restart keeps the book. Encrypted on-chain wallet rows stay in Postgres when `DATABASE_URL` connects. When Postgres is down they fall back to the same SQLite file. The ciphertext is useless without the encryption key, and the key is never printed.
@@ -125,6 +129,7 @@ The image sets `DATA_DIR=/data`, `PORT=7860`, and `LIVE_TRADING=false`. It does 
 | `WEBHOOK_SECRET` | optional, Space secret |
 | `LEARN_NIGHTLY` | `false` unless you want the midnight summary |
 | `LEARN_CHAT_ID` | operator chat, only if nightly is on |
+| `LEARN_HTTP_SECRET` | Space secret. Bearer token for `GET /api/learn`. Leave unset to keep the poll off (`503`) |
 | `OPENAI_API_KEY`, `HELIUS_API_KEY`, `ALCHEMY_API_KEY` | optional |
 
 `/data` is ephemeral until storage is attached. A coordinator with a Hugging Face token can attach it. Do not put the token in the repo.
