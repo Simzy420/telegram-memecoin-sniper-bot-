@@ -17,6 +17,25 @@ export interface PaperPosition {
   status: "open" | "closed";
   pnlUsd: number;
   note: string;
+  /** DexScreener USD mark at the paper fill. Null when that read failed. */
+  entryPriceUsd?: number | null;
+  /**
+   * Later observed USD mark (ledger refresh). Not set at the fill.
+   * A failed close may use this. It must not reuse the entry print as an exit.
+   */
+  lastMarkUsd?: number | null;
+}
+
+export interface PaperClose {
+  state: DeskState;
+  closed: PaperPosition | null;
+  /** Exit mark used for PnL, or null when no exit mark was observed. */
+  exitPriceUsd: number | null;
+  /**
+   * Realised paper PnL for the journal.
+   * Null when entry or exit was not observed. Zero is a real flat move.
+   */
+  journalPnlUsd: number | null;
 }
 
 export interface JournalEntry {
@@ -50,6 +69,42 @@ export function usd(amount: number): string {
   return amount.toLocaleString("en-US", { style: "currency", currency: "USD" });
 }
 
+/** Token marks can be far below one cent. PnL still uses usd(). */
+export function formatMark(price: number): string {
+  if (!Number.isFinite(price) || !(price > 0)) return "n/a";
+  if (price >= 1) {
+    return price.toLocaleString("en-US", {
+      style: "currency",
+      currency: "USD",
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 4,
+    });
+  }
+  return `$${Number(price.toPrecision(6)).toString()}`;
+}
+
+/**
+ * Paper mark-to-market PnL for a long clip.
+ *
+ * pnlUsd = sizeUsd * (exitPriceUsd - entryPriceUsd) / entryPriceUsd
+ *
+ * sizeUsd is the paper dollars spent at the entry mark, so the clip is fully
+ * invested long. A higher exit mark is a gain. A lower exit mark is a loss.
+ * Returns null when either price was not observed, is not finite, or is not
+ * positive. This does not invent a price.
+ */
+export function paperPnlUsd(
+  sizeUsd: number,
+  entryPriceUsd: number | null | undefined,
+  exitPriceUsd: number | null | undefined,
+): number | null {
+  const entry = observedPrice(entryPriceUsd);
+  const exit = observedPrice(exitPriceUsd);
+  if (entry == null || exit == null) return null;
+  if (!Number.isFinite(sizeUsd)) return null;
+  return round2((sizeUsd * (exit - entry)) / entry);
+}
+
 export function hireTroop(state: DeskState, at: string): DeskState {
   return note(
     { ...state, hired: [...SPECIALIST_IDS] },
@@ -63,6 +118,7 @@ export function openPaperPosition(
   candidate: Candidate,
   verdict: ShieldVerdict,
   at: string,
+  entryPriceUsd: number | null = null,
 ): { state: DeskState; position: PaperPosition | null; reason: string } {
   if (verdict === "block") {
     return {
@@ -89,6 +145,7 @@ export function openPaperPosition(
       reason: `Paper cash ${usd(state.cashUsd)} is below the ${usd(size)} clip.`,
     };
   }
+  const entry = observedPrice(entryPriceUsd);
   const position: PaperPosition = {
     id: `${candidate.symbol}-${at}`,
     symbol: candidate.symbol,
@@ -98,11 +155,12 @@ export function openPaperPosition(
     openedAt: at,
     status: "open",
     pnlUsd: 0,
-    note:
-      verdict === "caution"
-        ? "Caution clip. Mark-to-market is not wired, so PnL stays flat."
-        : "Paper fill. Mark-to-market is not wired, so PnL stays flat.",
+    entryPriceUsd: entry,
+    lastMarkUsd: null,
+    note: fillNote(verdict, entry),
   };
+  const priceBit =
+    entry == null ? "Mark unavailable." : `Entry ${formatMark(entry)}.`;
   const next = note(
     {
       ...state,
@@ -110,34 +168,92 @@ export function openPaperPosition(
       positions: [...state.positions, position],
     },
     at,
-    `Paper fill ${candidate.symbol} ${usd(size)} on ${candidate.chain}. No transaction broadcast.`,
+    `Paper fill ${candidate.symbol} ${usd(size)} on ${candidate.chain}. ${priceBit} No transaction broadcast.`,
   );
   return { state: next, position, reason: position.note };
 }
 
+/**
+ * Close a paper clip.
+ *
+ * exitPriceUsd is a fresh read. When that read fails, lastMarkUsd from a
+ * later ledger refresh is the exit. The entry print is not reused as an
+ * exit: with no observed exit, PnL stays 0 and journalPnlUsd stays null.
+ *
+ * Realised cash adds sizeUsd plus pnlUsd. See paperPnlUsd for the formula.
+ */
 export function closePaperPosition(
   state: DeskState,
   symbol: string,
   at: string,
-): { state: DeskState; closed: PaperPosition | null } {
+  exitPriceUsd: number | null = null,
+): PaperClose {
   const idx = state.positions.findIndex(
     (p) => p.status === "open" && p.symbol.toUpperCase() === symbol.toUpperCase(),
   );
-  if (idx < 0) return { state, closed: null };
+  if (idx < 0) {
+    return { state, closed: null, exitPriceUsd: null, journalPnlUsd: null };
+  }
   const current = state.positions[idx]!;
-  const closed: PaperPosition = { ...current, status: "closed" };
+  const entry = observedPrice(current.entryPriceUsd);
+  const fresh = observedPrice(exitPriceUsd);
+  const last = observedPrice(current.lastMarkUsd);
+  const source: "fresh" | "last_known" | "unavailable" =
+    fresh != null ? "fresh" : last != null ? "last_known" : "unavailable";
+  const exit = fresh ?? last;
+  const journalPnlUsd =
+    source === "unavailable" ? null : paperPnlUsd(current.sizeUsd, entry, exit);
+  const closed: PaperPosition = {
+    ...current,
+    status: "closed",
+    entryPriceUsd: entry,
+    lastMarkUsd: exit ?? current.lastMarkUsd ?? null,
+    pnlUsd: journalPnlUsd ?? 0,
+    note: closeNote(
+      current.note.toLowerCase().includes("caution"),
+      entry,
+      exit,
+      source,
+      journalPnlUsd,
+    ),
+  };
   const positions = state.positions.slice();
   positions[idx] = closed;
   const next = note(
     {
       ...state,
       positions,
-      cashUsd: round2(state.cashUsd + closed.sizeUsd),
+      cashUsd: round2(state.cashUsd + closed.sizeUsd + (journalPnlUsd ?? 0)),
     },
     at,
-    `Paper close ${closed.symbol} ${usd(closed.sizeUsd)}. PnL ${usd(closed.pnlUsd)}. No transaction broadcast.`,
+    `Paper close ${closed.symbol} ${usd(closed.sizeUsd)}. ${closed.note} PnL ${usd(closed.pnlUsd)}. No transaction broadcast.`,
   );
-  return { state: next, closed };
+  return {
+    state: next,
+    closed,
+    exitPriceUsd: journalPnlUsd == null ? null : exit,
+    journalPnlUsd,
+  };
+}
+
+/** Store a later mark on an open clip and refresh unrealised PnL. */
+export function applyOpenMark(
+  state: DeskState,
+  symbol: string,
+  markUsd: number | null,
+): DeskState {
+  const mark = observedPrice(markUsd);
+  if (mark == null) return state;
+  const idx = state.positions.findIndex(
+    (p) => p.status === "open" && p.symbol.toUpperCase() === symbol.toUpperCase(),
+  );
+  if (idx < 0) return state;
+  const current = state.positions[idx]!;
+  const pnl = paperPnlUsd(current.sizeUsd, current.entryPriceUsd, mark);
+  if (pnl == null) return state;
+  const positions = state.positions.slice();
+  positions[idx] = { ...current, lastMarkUsd: mark, pnlUsd: pnl };
+  return { ...state, positions };
 }
 
 export function formatLedger(state: DeskState): string {
@@ -146,10 +262,7 @@ export function formatLedger(state: DeskState): string {
     open.length === 0
       ? "Open: none"
       : open
-          .map(
-            (p) =>
-              `Open: ${p.symbol} ${usd(p.sizeUsd)} · ${p.chain} · PnL ${usd(p.pnlUsd)} · ${p.note}`,
-          )
+          .map((p) => formatOpenLine(p))
           .join("\n");
   const journal =
     state.journal.length === 0
@@ -164,6 +277,40 @@ export function formatLedger(state: DeskState): string {
     "Journal:",
     journal,
   ].join("\n");
+}
+
+function formatOpenLine(p: PaperPosition): string {
+  const entry = observedPrice(p.entryPriceUsd);
+  const mark = observedPrice(p.lastMarkUsd);
+  const entryText = entry == null ? "entry mark unavailable" : `entry ${formatMark(entry)}`;
+  const markText = mark == null ? "" : ` · mark ${formatMark(mark)}`;
+  return `Open: ${p.symbol} ${usd(p.sizeUsd)} · ${p.chain} · ${entryText}${markText} · MTM PnL ${usd(p.pnlUsd)} · ${p.note}`;
+}
+
+function fillNote(verdict: ShieldVerdict, entry: number | null): string {
+  const clip = verdict === "caution" ? "Caution clip." : "Paper fill.";
+  if (entry == null) return `${clip} Mark unavailable, so PnL stays flat.`;
+  return `${clip} Entry mark ${formatMark(entry)}.`;
+}
+
+function closeNote(
+  caution: boolean,
+  entry: number | null,
+  exit: number | null,
+  source: "fresh" | "last_known" | "unavailable",
+  pnl: number | null,
+): string {
+  const lead = caution ? "Caution clip close." : "Paper close.";
+  if (pnl == null || entry == null || exit == null || source === "unavailable") {
+    return `${lead} Mark unavailable, so PnL stays flat.`;
+  }
+  const via = source === "last_known" ? " Using last known mark." : "";
+  return `${lead} Entry ${formatMark(entry)}, exit ${formatMark(exit)}.${via}`;
+}
+
+function observedPrice(value: number | null | undefined): number | null {
+  if (value == null || !Number.isFinite(value) || !(value > 0)) return null;
+  return value;
 }
 
 function note(state: DeskState, at: string, text: string): DeskState {
