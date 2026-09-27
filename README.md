@@ -70,7 +70,7 @@ Then talk in plain text:
 - `shield check SLEEPAPE` or `/shield` — checklist
 - `snipe SLEEPAPE` — paper entry after Shield. `RUGPUP` is refused.
 - `ledger` or `/paper` — the book
-- `close SLEEPAPE` — flat paper exit (no mark-to-market feed yet)
+- `close SLEEPAPE` — paper exit. PnL uses the DexScreener entry and exit marks when both were read. A missing mark stays flat.
 - `/pulse` — tape read
 - `/learn` — Ledger summarizes the journal (win rate, expectancy, Shield blocks, top and bottom names). Empty books stay empty.
 - `/export` — CSV and JSONL of that chat's journal for a backtest
@@ -101,7 +101,7 @@ Do not set `LIVE_TRADING=true` expecting orders. Without the confirm phrase and 
 
 ## Paper → journal → learn → later live
 
-1. **Paper.** Leave `LIVE_TRADING=false`. Hire the troop and snipe a drill name. Sniper writes a paper clip only after Shield. Prices that were not observed stay null. PnL stays 0 until a mark feed exists, and `/learn` does not treat those flat closes as wins.
+1. **Paper.** Leave `LIVE_TRADING=false`. Hire the troop and snipe a name Shield does not block. Sniper writes a paper clip only after Shield and reads a DexScreener USD mark (read-only, no swap and no broadcast). The journal stores that fill price when the feed returns one. On close, paper PnL is `sizeUsd * (exitPriceUsd - entryPriceUsd) / entryPriceUsd`. If either mark is missing, the journal price and PnL stay null and the book shows mark unavailable. `/learn` still ignores closes whose PnL is exactly 0, and it does not score a null PnL as a win or a loss. Drill addresses (`EXAMPLE_…`, and the SLEEPAPE label) are not mints, so those clips stay flat unless a test mock supplies a price. A market-feed name with a real token address can show a non-zero PnL after the price moves.
 2. **Journal.** Every Scout, Shield, Sniper, Pulse, and Ledger action appends one JSONL row under `logs/days/YYYY-MM-DD/events.jsonl` (or `$DATA_DIR/logs/days/...` when `DATA_DIR` or `/data` is in use). The same row is inserted into SQLite at `data/durable.sqlite` (or `$DATA_DIR/durable.sqlite`). Fields: timestamp, session id, user id, agent, action, symbol, chain, size, price, pnl, shield reasons, tags, `paper` or `live`. Private-key shaped text is dropped and not written.
 3. **Learn.** `/learn` reads that chat's rows and reports win rate, expectancy, Shield block accuracy, and top/bottom symbols and strategies. A Shield block is scored only when a later realised close on that symbol has non-zero PnL. `/export` or `npm run export:journal` writes CSV and JSONL. Set `LEARN_NIGHTLY=true` and `LEARN_CHAT_ID` for an optional UTC midnight summary of the previous day. An empty day sends nothing.
 

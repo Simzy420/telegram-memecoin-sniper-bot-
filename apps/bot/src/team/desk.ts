@@ -1,6 +1,7 @@
 import {
   discoverCandidates,
   EXAMPLE_CANDIDATES,
+  fetchTokenMarkUsd,
   findCandidate,
   type Candidate,
   type Discovery,
@@ -10,6 +11,7 @@ import type { JournalDraft } from "./journal.js";
 import { submitLiveOrder } from "./live.js";
 import { flavorChat } from "./openai.js";
 import {
+  applyOpenMark,
   closePaperPosition,
   formatLedger,
   freshDesk,
@@ -32,6 +34,7 @@ const HELP =
   "Desk Status — who is hired, and that the book is paper.\n" +
   "/learn — Ledger reads the journal: win rate, expectancy, Shield blocks. No invented fills.\n" +
   "/export — dump the journal as CSV and JSONL for a backtest.\n" +
+  "Ledger shows the entry mark and open mark-to-market PnL when a DexScreener price was read.\n" +
   "Try: scout, shield check SLEEPAPE, snipe SLEEPAPE, ledger, close SLEEPAPE.\n" +
   "Commands: /hire /watch /status /paper /scout /sniper /pulse /ledger /shield /learn /export";
 
@@ -109,6 +112,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
   }
 
   if (route.intent === "status") {
+    state = await refreshOpenMarks(state, input.fetchImpl);
     const hired =
       state.hired.length === 0
         ? "Nobody is hired yet. Tap Hire Team."
@@ -124,6 +128,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
   }
 
   if (route.intent === "ledger") {
+    state = await refreshOpenMarks(state, input.fetchImpl);
     events.push(draft("ledger", "book", { tags: ["book"] }));
     return done(state, [
       { speaker: "boss", text: "Ledger has the paper book." },
@@ -275,7 +280,21 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
         { speaker: "ledger", text: formatLedger(state) },
       ]);
     }
-    const opened = openPaperPosition(state, found.candidate, report.verdict, at);
+    const entryPriceUsd =
+      report.verdict === "block"
+        ? null
+        : await fetchTokenMarkUsd(
+            found.candidate.chain,
+            found.candidate.address,
+            input.fetchImpl,
+          );
+    const opened = openPaperPosition(
+      state,
+      found.candidate,
+      report.verdict,
+      at,
+      entryPriceUsd,
+    );
     state = opened.state;
     const isNewFill = opened.position != null && opened.reason === opened.position.note;
     if (isNewFill && opened.position) {
@@ -284,6 +303,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
           symbol: opened.position.symbol,
           chain: opened.position.chain,
           size: opened.position.sizeUsd,
+          price: opened.position.entryPriceUsd ?? null,
           pnl: null,
           shieldReasons: shieldReasonList(report),
           tags: ["fill", `verdict:${report.verdict}`, strategyTag(report.verdict)],
@@ -294,6 +314,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
           symbol: opened.position.symbol,
           chain: opened.position.chain,
           size: opened.position.sizeUsd,
+          price: opened.position.entryPriceUsd ?? null,
           tags: ["book", "position_opened"],
         }),
       );
@@ -322,17 +343,24 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
   }
 
   if (route.intent === "close") {
-    if (!route.symbol) {
+    const symbol = route.symbol;
+    if (!symbol) {
       return done(state, [
         { speaker: "boss", text: "Name the paper position to close. Example: close SLEEPAPE." },
       ]);
     }
-    const closed = closePaperPosition(state, route.symbol, at);
+    const open = state.positions.find(
+      (p) => p.status === "open" && p.symbol.toUpperCase() === symbol.toUpperCase(),
+    );
+    const exitPriceUsd = open
+      ? await fetchTokenMarkUsd(open.chain, open.address, input.fetchImpl)
+      : null;
+    const closed = closePaperPosition(state, symbol, at, exitPriceUsd);
     state = closed.state;
     if (!closed.closed) {
-      events.push(draft("ledger", "book", { symbol: route.symbol, tags: ["book", "missing"] }));
+      events.push(draft("ledger", "book", { symbol, tags: ["book", "missing"] }));
       return done(state, [
-        { speaker: "boss", text: `No open paper position named ${route.symbol}.` },
+        { speaker: "boss", text: `No open paper position named ${symbol}.` },
         { speaker: "ledger", text: formatLedger(state) },
       ]);
     }
@@ -344,7 +372,8 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
         symbol: closed.closed.symbol,
         chain: closed.closed.chain,
         size: closed.closed.sizeUsd,
-        pnl: closed.closed.pnlUsd,
+        price: closed.exitPriceUsd,
+        pnl: closed.journalPnlUsd,
         tags: ["outcome:realised", strategy],
       }),
     );
@@ -353,10 +382,15 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
         symbol: closed.closed.symbol,
         chain: closed.closed.chain,
         size: closed.closed.sizeUsd,
-        pnl: closed.closed.pnlUsd,
+        price: closed.exitPriceUsd,
+        pnl: closed.journalPnlUsd,
         tags: ["book", "position_closed"],
       }),
     );
+    const exitLine =
+      closed.journalPnlUsd == null
+        ? `Paper exit ${closed.closed.symbol}. Mark unavailable, so PnL stays flat. I did not send a transaction.`
+        : `Paper exit ${closed.closed.symbol}. PnL ${usd(closed.journalPnlUsd)}. I did not send a transaction.`;
     return done(state, [
       {
         speaker: "boss",
@@ -364,7 +398,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
       },
       {
         speaker: "sniper",
-        text: `Paper exit ${closed.closed.symbol}. I did not send a transaction.`,
+        text: exitLine,
       },
       { speaker: "ledger", text: formatLedger(state) },
     ]);
@@ -428,7 +462,7 @@ function hireLine(id: SpecialistId): string {
     case "pulse":
       return "I will call heat and quiet. Not hopium.";
     case "ledger":
-      return "Book is open. Every paper fill gets a journal line. PnL stays flat until a mark feed exists.";
+      return "Book is open. Every paper fill gets a journal line. I read a DexScreener mark when the tape has one. A missing mark stays flat.";
     case "shield":
       return "Nothing gets sized until the checklist runs. A pass is still not a live buy.";
   }
@@ -466,6 +500,25 @@ function chatLines(ids: SpecialistId[]): Line[] {
     { speaker: "boss", text: `On it. ${personaNameList(ids)}.` },
     ...ids.map((id) => ({ speaker: id, text: PERSONAS[id].role })),
   ];
+}
+
+async function refreshOpenMarks(
+  state: DeskState,
+  fetchImpl?: typeof fetch,
+): Promise<DeskState> {
+  const open = state.positions.filter((p) => p.status === "open");
+  if (open.length === 0) return state;
+  const marks = await Promise.all(
+    open.map(async (position) => ({
+      symbol: position.symbol,
+      mark: await fetchTokenMarkUsd(position.chain, position.address, fetchImpl),
+    })),
+  );
+  let next = state;
+  for (const row of marks) {
+    next = applyOpenMark(next, row.symbol, row.mark);
+  }
+  return next;
 }
 
 async function loadDiscovery(input: DeskTurnInput, state: DeskState): Promise<Discovery> {

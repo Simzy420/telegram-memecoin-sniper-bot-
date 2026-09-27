@@ -167,6 +167,80 @@ export function findCandidate(
   return null;
 }
 
+const MARK_CHAINS = new Set(["solana", "base", "ethereum"]);
+
+/**
+ * Read-only USD mark from the DexScreener token endpoint discovery already uses.
+ * Returns null when the response has no positive price. Never invents a price.
+ * The Node test runner does not call the network unless a fetchImpl is passed.
+ */
+export async function fetchTokenMarkUsd(
+  chain: string,
+  address: string,
+  fetchImpl?: typeof fetch,
+): Promise<number | null> {
+  const normalized = chain.trim().toLowerCase();
+  if (!MARK_CHAINS.has(normalized)) return null;
+  const token = address.trim();
+  if (!token || token.startsWith("EXAMPLE_")) return null;
+  const impl = fetchImpl ?? (process.env.NODE_TEST_CONTEXT ? undefined : fetch);
+  if (!impl) return null;
+  try {
+    const payload = await fetchJson(
+      `https://api.dexscreener.com/tokens/v1/${normalized}/${encodeURIComponent(token)}`,
+      impl,
+    );
+    return markUsdFromPairs(payload);
+  } catch {
+    return null;
+  }
+}
+
+/** Highest-liquidity positive priceUsd on a DexScreener pairs payload. */
+export function markUsdFromPairs(payload: unknown): number | null {
+  const rows = pairRows(payload);
+  let best: number | null = null;
+  let bestLiq = -1;
+  for (const row of rows) {
+    const price = positivePrice(row.priceUsd);
+    if (price == null) continue;
+    const liq = row.liquidity?.usd;
+    const liquidity = typeof liq === "number" && Number.isFinite(liq) ? liq : 0;
+    if (liquidity >= bestLiq) {
+      best = price;
+      bestLiq = liquidity;
+    }
+  }
+  return best;
+}
+
+function pairRows(payload: unknown): PairRow[] {
+  if (Array.isArray(payload)) return payload.filter(isPairRow);
+  if (
+    payload &&
+    typeof payload === "object" &&
+    Array.isArray((payload as { pairs?: unknown }).pairs)
+  ) {
+    return (payload as { pairs: unknown[] }).pairs.filter(isPairRow);
+  }
+  return [];
+}
+
+function isPairRow(value: unknown): value is PairRow {
+  return value != null && typeof value === "object";
+}
+
+function positivePrice(raw: unknown): number | null {
+  const n =
+    typeof raw === "number"
+      ? raw
+      : typeof raw === "string" && raw.trim()
+        ? Number(raw)
+        : NaN;
+  if (!Number.isFinite(n) || !(n > 0)) return null;
+  return n;
+}
+
 interface ProfileRow {
   chainId?: string;
   tokenAddress?: string;
