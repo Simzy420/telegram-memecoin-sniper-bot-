@@ -107,6 +107,8 @@ test("help and status show the caution clip is $25 paper only", async () => {
   assert.match(helpText, /paper only/);
   assert.match(helpText, /Entry waits on Shield/);
   assert.match(helpText, /does not broadcast/);
+  assert.match(helpText, /Still UNKNOWN/);
+  assert.match(helpText, /RugCheck down/);
 
   const hired = await handleDeskTurn({ text: "/hire", state: freshDesk(), ...quiet });
   const status = await handleDeskTurn({

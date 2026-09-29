@@ -32,7 +32,28 @@ The runnable bot is the TypeScript grammY app in `apps/bot`. `main.py` is an unf
 
 ## Paper mode
 
-`LIVE_TRADING` defaults to `false`. Scout can show drill names (`PAPERPEPE`, `RUGPUP`, `SLEEPAPE`) or a read-only DexScreener profile feed. Shield sums DexScreener pool depth when pairs report it. With `HELIUS_API_KEY` or `ALCHEMY_API_KEY`, Shield reads the Solana mint account (mint authority, freeze authority, and Token-2022 transfer fee or a non-transferable mint). RugCheck is a public read with no key: when its report includes the field, Shield uses LP lock, token tax, and honeypot. A missing field stays UNKNOWN. UNKNOWN keeps the card on CAUTION. Shield does not turn thin data into PASS. Still UNKNOWN when RugCheck is down (LP lock and pool honeypot), when a Token-2022 transfer hook is set, when neither DexScreener nor RugCheck reports liquidity, and for EVM tax / LP / honeypot other than an empty-bytecode block. With `ALCHEMY_API_KEY`, Shield still checks that an EVM contract has bytecode.
+`LIVE_TRADING` defaults to `false`. Scout can show drill names (`PAPERPEPE`, `RUGPUP`, `SLEEPAPE`) or a read-only DexScreener profile feed. Shield sums DexScreener pool depth when pairs report it. With `HELIUS_API_KEY` or `ALCHEMY_API_KEY`, Shield reads the Solana mint account (mint authority, freeze authority, and Token-2022 transfer fee or a non-transferable mint). RugCheck is a public read with no key: when its report includes the field, Shield uses LP lock, token tax, and honeypot. A missing field stays UNKNOWN. UNKNOWN keeps the card on CAUTION. Shield does not turn thin data into PASS. With `ALCHEMY_API_KEY`, Shield still checks that an EVM contract has bytecode. The same rules are in `/help`.
+
+## What the desk can use
+
+Saved operator copy. The running desk already applies this in code. It does not read this file at runtime.
+
+| Shield result | Paper clip | Live |
+| --- | --- | --- |
+| PASS | $50 | No broadcast |
+| CAUTION | $25, learning only | No broadcast |
+| BLOCK, unknown card, or NEEDS DATA | No fill | No broadcast |
+
+`/learn` can score a CAUTION or PASS close only after both DexScreener marks were read and PnL is not zero. A flat close, including drill names, is stored and then ignored. Shield block accuracy still needs a later non-zero close on that symbol.
+
+These stay UNKNOWN, so the card stays CAUTION. The desk does not invent a PASS from them:
+
+- LP lock and pool honeypot when RugCheck is down or omits the field
+- A Token-2022 transfer hook
+- Liquidity when DexScreener has no `liquidity.usd` and RugCheck has no `totalMarketLiquidity`
+- EVM tax, LP, and honeypot, other than an empty bytecode contract, which BLOCKs
+
+This branch is not what Telegram runs until it is merged and the host redeploys. Until then `@Big_Brain_Ape_Bot` is still the previous build.
 
 Sniper records a paper clip in Ledger. **This build never signs and never broadcasts.** Live mode arms only when `LIVE_TRADING` is the exact string `true`, `LIVE_TRADING_CONFIRM` is `I_UNDERSTAND`, and `WALLET_ENCRYPTION_KEY` is a real backed-up secret. Even then the live path is a stub: it runs safety checks and refuses the order. The unfinished Python executor returns the same refusal before any quote or signature.
 

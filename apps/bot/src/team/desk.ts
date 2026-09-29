@@ -34,6 +34,7 @@ const HELP =
   "Desk Status — who is hired, and that the book is paper.\n" +
   `${PAPER_POLICY_LINE}\n` +
   "Entry waits on Shield. A pass is still not a live buy, and this build does not broadcast.\n" +
+  "Still UNKNOWN, so CAUTION rather than PASS: RugCheck down (LP lock and pool honeypot), a Token-2022 transfer hook, no liquidity number from DexScreener or RugCheck, and EVM tax, LP, or honeypot other than an empty-bytecode block.\n" +
   "/learn — Ledger reads the journal: win rate, expectancy, Shield blocks. No invented fills.\n" +
   "/export — dump the journal as CSV and JSONL for a backtest.\n" +
   "Ledger shows the entry mark and open mark-to-market PnL when a DexScreener price was read.\n" +
