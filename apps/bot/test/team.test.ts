@@ -182,10 +182,19 @@ test("market discovery uses helius when a key is present and falls back to drill
       ]);
     }
     if (href.includes("helius-rpc.com")) {
-      assert.equal(JSON.parse(String(init?.body)).method, "getAsset");
-      return json({
-        result: { token_info: { mint_authority: null, freeze_authority: "Freeze111" } },
-      });
+      const method = JSON.parse(String(init?.body)).method;
+      if (method === "getAsset") {
+        return json({
+          result: { token_info: { mint_authority: null, freeze_authority: "Freeze111" } },
+        });
+      }
+      if (method === "getAccountInfo") {
+        return json({ result: { value: null } });
+      }
+      throw new Error(`unexpected helius method ${method}`);
+    }
+    if (href.includes("rugcheck.xyz")) {
+      return json({});
     }
     throw new Error(`unexpected ${href}`);
   };

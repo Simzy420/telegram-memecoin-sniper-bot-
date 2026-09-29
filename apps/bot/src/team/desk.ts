@@ -452,7 +452,7 @@ function strategyTag(verdict: ShieldReport["verdict"]): string {
 
 function providerLine(env: Record<string, string | undefined>): string {
   const flag = (value: string | undefined) => (value ? "set" : "not set");
-  return `OpenAI ${flag(env.OPENAI_API_KEY)}. Helius ${flag(env.HELIUS_API_KEY)}. Alchemy ${flag(env.ALCHEMY_API_KEY)}.`;
+  return `OpenAI ${flag(env.OPENAI_API_KEY)}. Helius ${flag(env.HELIUS_API_KEY)}. Alchemy ${flag(env.ALCHEMY_API_KEY)}. RugCheck is a public Solana read.`;
 }
 
 function hireLine(id: SpecialistId): string {

@@ -32,7 +32,7 @@ The runnable bot is the TypeScript grammY app in `apps/bot`. `main.py` is an unf
 
 ## Paper mode
 
-`LIVE_TRADING` defaults to `false`. Scout can show drill names (`PAPERPEPE`, `RUGPUP`, `SLEEPAPE`) or a read-only DexScreener profile feed. With `HELIUS_API_KEY`, Shield also reads Solana mint and freeze authorities. With `ALCHEMY_API_KEY`, Shield checks that an EVM contract has bytecode.
+`LIVE_TRADING` defaults to `false`. Scout can show drill names (`PAPERPEPE`, `RUGPUP`, `SLEEPAPE`) or a read-only DexScreener profile feed. Shield sums DexScreener pool depth when pairs report it. With `HELIUS_API_KEY` or `ALCHEMY_API_KEY`, Shield reads the Solana mint account (mint authority, freeze authority, and Token-2022 transfer fee or a non-transferable mint). RugCheck is a public read with no key: when its report includes the field, Shield uses LP lock, token tax, and honeypot. A missing field stays UNKNOWN. UNKNOWN keeps the card on CAUTION. Shield does not turn thin data into PASS. Still UNKNOWN when RugCheck is down (LP lock and pool honeypot), when a Token-2022 transfer hook is set, when neither DexScreener nor RugCheck reports liquidity, and for EVM tax / LP / honeypot other than an empty-bytecode block. With `ALCHEMY_API_KEY`, Shield still checks that an EVM contract has bytecode.
 
 Sniper records a paper clip in Ledger. **This build never signs and never broadcasts.** Live mode arms only when `LIVE_TRADING` is the exact string `true`, `LIVE_TRADING_CONFIRM` is `I_UNDERSTAND`, and `WALLET_ENCRYPTION_KEY` is a real backed-up secret. Even then the live path is a stub: it runs safety checks and refuses the order. The unfinished Python executor returns the same refusal before any quote or signature.
 
