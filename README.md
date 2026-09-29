@@ -68,7 +68,7 @@ Then talk in plain text:
 
 - `scout` or `/scout` — candidates
 - `shield check SLEEPAPE` or `/shield` — checklist
-- `snipe SLEEPAPE` — paper entry after Shield. `RUGPUP` is refused.
+- `snipe SLEEPAPE` — paper entry after Shield. PASS is a $50 paper clip. CAUTION is a $25 paper clip (learning only, still paper). `RUGPUP` is BLOCK and is not filled. An unknown card and NEEDS DATA are not filled.
 - `ledger` or `/paper` — the book
 - `close SLEEPAPE` — paper exit. PnL uses the DexScreener entry and exit marks when both were read. A missing mark stays flat.
 - `/pulse` — tape read
@@ -101,7 +101,7 @@ Do not set `LIVE_TRADING=true` expecting orders. Without the confirm phrase and 
 
 ## Paper → journal → learn → later live
 
-1. **Paper.** Leave `LIVE_TRADING=false`. Hire the troop and snipe a name Shield does not block. Sniper writes a paper clip only after Shield and reads a DexScreener USD mark (read-only, no swap and no broadcast). The journal stores that fill price when the feed returns one. On close, paper PnL is `sizeUsd * (exitPriceUsd - entryPriceUsd) / entryPriceUsd`. If either mark is missing, the journal price and PnL stay null and the book shows mark unavailable. `/learn` still ignores closes whose PnL is exactly 0, and it does not score a null PnL as a win or a loss. Drill addresses (`EXAMPLE_…`, and the SLEEPAPE label) are not mints, so those clips stay flat unless a test mock supplies a price. A market-feed name with a real token address can show a non-zero PnL after the price moves.
+1. **Paper.** Leave `LIVE_TRADING=false`. Hire the troop and snipe a name Shield does not block. Sniper writes a paper clip only after Shield: PASS $50, CAUTION $25. BLOCK, an unknown card, and NEEDS DATA do not fill. The CAUTION clip is paper only. Sniper reads a DexScreener USD mark (read-only, no swap and no broadcast). The journal stores that fill price when the feed returns one. On close, paper PnL is `sizeUsd * (exitPriceUsd - entryPriceUsd) / entryPriceUsd`. If either mark is missing, the journal price and PnL stay null and the book shows mark unavailable. `/learn` still ignores closes whose PnL is exactly 0, and it does not score a null PnL as a win or a loss. Drill addresses (`EXAMPLE_…`, and the SLEEPAPE label) are not mints, so those clips stay flat unless a test mock supplies a price. A market-feed name with a real token address can show a non-zero PnL after the price moves.
 2. **Journal.** Every Scout, Shield, Sniper, Pulse, and Ledger action appends one JSONL row under `logs/days/YYYY-MM-DD/events.jsonl` (or `$DATA_DIR/logs/days/...` when `DATA_DIR` or `/data` is in use). The same row is inserted into SQLite at `data/durable.sqlite` (or `$DATA_DIR/durable.sqlite`). Fields: timestamp, session id, user id, agent, action, symbol, chain, size, price, pnl, shield reasons, tags, `paper` or `live`. Private-key shaped text is dropped and not written.
 3. **Learn.** `/learn` reads that chat's rows and reports win rate, expectancy, Shield block accuracy, and top/bottom symbols and strategies. A Shield block is scored only when a later realised close on that symbol has non-zero PnL. `/export` or `npm run export:journal` writes CSV and JSONL. Set `LEARN_NIGHTLY=true` and `LEARN_CHAT_ID` for an optional UTC midnight summary of the previous day. An empty day sends nothing.
 

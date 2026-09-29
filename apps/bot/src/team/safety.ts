@@ -35,10 +35,10 @@ export function runShield(candidate: Candidate): ShieldReport {
 
   const summary =
     verdict === "block"
-      ? `${candidate.symbol} fails the checklist. I will not size it, even on paper.`
+      ? `${candidate.symbol} fails the checklist. No paper fill.`
       : verdict === "caution"
-        ? `${candidate.symbol} is not clean. Paper size only, and small.`
-        : `${candidate.symbol} clears the checklist on the fields I can see. Still paper.`;
+        ? `${candidate.symbol} is not a clean pass. Caution clip is $25 paper. Not a live buy.`
+        : `${candidate.symbol} clears the checklist on the fields I can see. Pass clip is $50 paper. Not a live buy.`;
 
   return { verdict, flags, summary };
 }

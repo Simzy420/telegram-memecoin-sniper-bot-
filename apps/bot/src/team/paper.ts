@@ -7,6 +7,20 @@ export const PAPER_BANKROLL_USD = 1000;
 export const PAPER_SIZE_USD = 50;
 export const PAPER_CAUTION_USD = 25;
 
+/**
+ * Operator-facing clip policy. PASS and CAUTION are paper fills.
+ * BLOCK, a symbol with no card, and NEEDS DATA do not fill.
+ */
+export const PAPER_POLICY_LINE =
+  "Paper clips: PASS $50, CAUTION $25. A CAUTION clip is paper only. BLOCK, an unknown card, and NEEDS DATA do not fill.";
+
+/** Paper dollars for a Shield verdict. Null means no fill. */
+export function paperClipUsd(verdict: ShieldVerdict): number | null {
+  if (verdict === "pass") return PAPER_SIZE_USD;
+  if (verdict === "caution") return PAPER_CAUTION_USD;
+  return null;
+}
+
 export interface PaperPosition {
   id: string;
   symbol: string;
@@ -120,7 +134,8 @@ export function openPaperPosition(
   at: string,
   entryPriceUsd: number | null = null,
 ): { state: DeskState; position: PaperPosition | null; reason: string } {
-  if (verdict === "block") {
+  const size = paperClipUsd(verdict);
+  if (size == null) {
     return {
       state,
       position: null,
@@ -137,7 +152,6 @@ export function openPaperPosition(
       reason: `${candidate.symbol} is already an open paper position.`,
     };
   }
-  const size = verdict === "caution" ? PAPER_CAUTION_USD : PAPER_SIZE_USD;
   if (state.cashUsd < size) {
     return {
       state,
