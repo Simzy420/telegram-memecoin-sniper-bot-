@@ -17,8 +17,8 @@ import {
   freshDesk,
   hireTroop,
   openPaperPosition,
-  PAPER_CAUTION_USD,
-  PAPER_SIZE_USD,
+  PAPER_POLICY_LINE,
+  paperClipUsd,
   usd,
   type DeskState,
 } from "./paper.js";
@@ -32,6 +32,8 @@ const HELP =
   "Hire Team — seat Scout, Sniper, Pulse, Ledger, and Shield.\n" +
   "Watch Tape — Scout lists names, Shield checks the first one, Pulse reads it.\n" +
   "Desk Status — who is hired, and that the book is paper.\n" +
+  `${PAPER_POLICY_LINE}\n` +
+  "Entry waits on Shield. A pass is still not a live buy, and this build does not broadcast.\n" +
   "/learn — Ledger reads the journal: win rate, expectancy, Shield blocks. No invented fills.\n" +
   "/export — dump the journal as CSV and JSONL for a backtest.\n" +
   "Ledger shows the entry mark and open mark-to-market PnL when a DexScreener price was read.\n" +
@@ -121,7 +123,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
     return done(state, [
       {
         speaker: "boss",
-        text: `${hired} Watching: ${state.watching ? "yes" : "no"}. ${gate.detail} ${providerLine(env)}`,
+        text: `${hired} Watching: ${state.watching ? "yes" : "no"}. ${gate.detail} ${PAPER_POLICY_LINE} ${providerLine(env)}`,
       },
       { speaker: "ledger", text: formatLedger(state) },
     ]);
@@ -238,18 +240,18 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
       return done(state, [
         {
           speaker: "boss",
-          text: `${route.symbol} is not on the example tape or the last watch. Ask Scout, or use PAPERPEPE, RUGPUP, or SLEEPAPE.`,
+          text: `${route.symbol} is not on the example tape or the last watch. Unknown card. NEEDS DATA. No paper fill. Ask Scout, or use PAPERPEPE, RUGPUP, or SLEEPAPE.`,
         },
         {
           speaker: "sniper",
-          text: "I will not invent a mint. No paper fill.",
+          text: "Unknown card. NEEDS DATA. I will not invent a mint. No paper fill.",
         },
       ]);
     }
     const report = runShield(found.candidate);
     events.push(shieldDraft(found.candidate, report));
     if (gate.liveEnabled) {
-      const size = report.verdict === "caution" ? PAPER_CAUTION_USD : PAPER_SIZE_USD;
+      const size = paperClipUsd(report.verdict) ?? 0;
       const live = submitLiveOrder(
         {
           symbol: found.candidate.symbol,
@@ -450,7 +452,7 @@ function strategyTag(verdict: ShieldReport["verdict"]): string {
 
 function providerLine(env: Record<string, string | undefined>): string {
   const flag = (value: string | undefined) => (value ? "set" : "not set");
-  return `OpenAI ${flag(env.OPENAI_API_KEY)}. Helius ${flag(env.HELIUS_API_KEY)}. Alchemy ${flag(env.ALCHEMY_API_KEY)}.`;
+  return `OpenAI ${flag(env.OPENAI_API_KEY)}. Helius ${flag(env.HELIUS_API_KEY)}. Alchemy ${flag(env.ALCHEMY_API_KEY)}. RugCheck is a public Solana read.`;
 }
 
 function hireLine(id: SpecialistId): string {
@@ -464,7 +466,7 @@ function hireLine(id: SpecialistId): string {
     case "ledger":
       return "Book is open. Every paper fill gets a journal line. I read a DexScreener mark when the tape has one. A missing mark stays flat.";
     case "shield":
-      return "Nothing gets sized until the checklist runs. A pass is still not a live buy.";
+      return "Nothing gets sized until the checklist runs. PASS is a $50 paper clip. CAUTION is a $25 paper clip. BLOCK, an unknown card, and NEEDS DATA do not fill. A pass is still not a live buy.";
   }
 }
 

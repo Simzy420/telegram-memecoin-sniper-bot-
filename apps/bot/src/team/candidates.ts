@@ -1,3 +1,11 @@
+import {
+  mergeShieldFacts,
+  parseMintAccount,
+  parseRugcheckReport,
+  shieldFactsPresent,
+  sumLiquidityUsd,
+} from "./shield-data.js";
+
 export type CandidateChain = "solana" | "base" | "ethereum";
 export type CandidateSource = "example" | "market";
 
@@ -114,8 +122,8 @@ export async function discoverCandidates(opts: DiscoverOpts = {}): Promise<Disco
 
     const candidates: Candidate[] = [];
     for (const profile of picked) {
-      const pair = await loadBestPair(profile, fetchImpl);
-      let candidate = profileToCandidate(profile, pair);
+      const pairs = await loadPairs(profile, fetchImpl);
+      let candidate = profileToCandidate(profile, pairs.rows, pairs.ok);
       if (opts.heliusApiKey && candidate.chain === "solana") {
         const enriched = await enrichHelius(candidate, opts.heliusApiKey, fetchImpl);
         if (enriched) {
@@ -131,6 +139,21 @@ export async function discoverCandidates(opts: DiscoverOpts = {}): Promise<Disco
         if (enriched) {
           candidate = enriched;
           notes.push("Alchemy bytecode check");
+        }
+      }
+      if (candidate.chain === "solana") {
+        const rpc = solanaShieldRpc(opts.heliusApiKey, opts.alchemyApiKey);
+        if (rpc) {
+          const enriched = await enrichMintAccount(candidate, rpc, fetchImpl);
+          if (enriched) {
+            candidate = enriched;
+            notes.push("Solana mint account check");
+          }
+        }
+        const checked = await enrichRugcheck(candidate, fetchImpl);
+        if (checked) {
+          candidate = checked;
+          notes.push("RugCheck read");
         }
       }
       candidates.push(candidate);
@@ -268,31 +291,36 @@ function pickProfiles(payload: unknown): ProfileRow[] {
   return out;
 }
 
-async function loadBestPair(
+async function loadPairs(
   profile: ProfileRow,
   fetchImpl: typeof fetch,
-): Promise<PairRow | null> {
+): Promise<{ ok: boolean; rows: PairRow[] }> {
   const chain = profile.chainId ?? "solana";
   const url = `https://api.dexscreener.com/tokens/v1/${chain}/${profile.tokenAddress}`;
   try {
     const payload = await fetchJson(url, fetchImpl);
     const rows = Array.isArray(payload) ? (payload as PairRow[]) : [];
-    let best: PairRow | null = null;
-    let bestLiq = -1;
-    for (const row of rows) {
-      const liq = row.liquidity?.usd ?? 0;
-      if (liq >= bestLiq) {
-        best = row;
-        bestLiq = liq;
-      }
-    }
-    return best;
+    return { ok: true, rows };
   } catch {
-    return null;
+    return { ok: false, rows: [] };
   }
 }
 
-function profileToCandidate(profile: ProfileRow, pair: PairRow | null): Candidate {
+function bestPair(rows: PairRow[]): PairRow | null {
+  let best: PairRow | null = null;
+  let bestLiq = -1;
+  for (const row of rows) {
+    const liq = row.liquidity?.usd ?? 0;
+    if (liq >= bestLiq) {
+      best = row;
+      bestLiq = liq;
+    }
+  }
+  return best;
+}
+
+function profileToCandidate(profile: ProfileRow, rows: PairRow[], pairsOk: boolean): Candidate {
+  const pair = bestPair(rows);
   const chain = (profile.chainId?.toLowerCase() ?? "solana") as CandidateChain;
   const address = profile.tokenAddress ?? "";
   const symbol = (pair?.baseToken?.symbol || shortSymbol(address)).toUpperCase();
@@ -307,7 +335,7 @@ function profileToCandidate(profile: ProfileRow, pair: PairRow | null): Candidat
     name,
     chain,
     address,
-    liqUsd: pair?.liquidity?.usd ?? null,
+    liqUsd: pairsOk ? sumLiquidityUsd(rows) : null,
     ageMin,
     taxPct: null,
     honeypot: null,
@@ -316,6 +344,62 @@ function profileToCandidate(profile: ProfileRow, pair: PairRow | null): Candidat
     lpLocked: null,
     source: "market",
   };
+}
+
+function solanaShieldRpc(heliusApiKey?: string, alchemyApiKey?: string): string | null {
+  if (heliusApiKey) {
+    return `https://mainnet.helius-rpc.com/?api-key=${encodeURIComponent(heliusApiKey)}`;
+  }
+  if (alchemyApiKey) {
+    return `https://solana-mainnet.g.alchemy.com/v2/${encodeURIComponent(alchemyApiKey)}`;
+  }
+  return null;
+}
+
+async function enrichMintAccount(
+  candidate: Candidate,
+  rpcUrl: string,
+  fetchImpl: typeof fetch,
+): Promise<Candidate | null> {
+  try {
+    const payload = await fetchJson(rpcUrl, fetchImpl, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "shield-mint",
+        method: "getAccountInfo",
+        params: [candidate.address, { encoding: "base64" }],
+      }),
+    });
+    const value = (payload as { result?: { value?: { data?: unknown; owner?: unknown } } })
+      .result?.value;
+    const data = value?.data;
+    const owner = typeof value?.owner === "string" ? value.owner : "";
+    if (!Array.isArray(data) || typeof data[0] !== "string" || !data[0]) return null;
+    const facts = parseMintAccount(data[0], owner);
+    if (!shieldFactsPresent(facts)) return null;
+    return mergeShieldFacts(candidate, facts);
+  } catch {
+    return null;
+  }
+}
+
+async function enrichRugcheck(
+  candidate: Candidate,
+  fetchImpl: typeof fetch,
+): Promise<Candidate | null> {
+  try {
+    const payload = await fetchJson(
+      `https://api.rugcheck.xyz/v1/tokens/${encodeURIComponent(candidate.address)}/report`,
+      fetchImpl,
+    );
+    const facts = parseRugcheckReport(payload);
+    if (!shieldFactsPresent(facts)) return null;
+    return mergeShieldFacts(candidate, facts);
+  } catch {
+    return null;
+  }
 }
 
 async function enrichHelius(
@@ -342,11 +426,14 @@ async function enrichHelius(
       .result;
     const info = result?.token_info;
     if (!info) return null;
-    return {
-      ...candidate,
-      mintAuthority: authorityPresent(info.mint_authority),
-      freezeAuthority: authorityPresent(info.freeze_authority),
-    };
+    const facts: {
+      mintAuthority?: boolean | null;
+      freezeAuthority?: boolean | null;
+    } = {};
+    if ("mint_authority" in info) facts.mintAuthority = authorityPresent(info.mint_authority);
+    if ("freeze_authority" in info) facts.freezeAuthority = authorityPresent(info.freeze_authority);
+    if (!shieldFactsPresent(facts)) return null;
+    return mergeShieldFacts(candidate, facts);
   } catch {
     return null;
   }
