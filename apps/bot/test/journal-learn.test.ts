@@ -42,6 +42,7 @@ function row(partial: Partial<JournalRow> & Pick<JournalRow, "timestamp" | "agen
     user_id: "user-1",
     symbol: null,
     chain: null,
+    address: null,
     size: null,
     price: null,
     pnl: null,
@@ -140,6 +141,7 @@ test("journal append writes a UTC day JSONL file and sqlite, then reloads the sa
     action: "tape",
     symbol: "SLEEPAPE",
     chain: "base",
+    address: "So11111111111111111111111111111111111111112",
     tags: ["tape"],
   });
   appendJournalRows([nextDay], { root, dbPath });
@@ -154,6 +156,8 @@ test("journal append writes a UTC day JSONL file and sqlite, then reloads the sa
   assert.equal(loaded[0]?.agent, "shield");
   assert.equal(loaded[1]?.pnl, -8);
   assert.equal(loaded[2]?.timestamp.slice(0, 10), "2026-09-23");
+  assert.equal(loaded[0]?.address, null);
+  assert.equal(loaded[2]?.address, "So11111111111111111111111111111111111111112");
   assert.deepEqual(readJournalFiles(root).map((item) => item.action), [
     "check",
     "paper_close",

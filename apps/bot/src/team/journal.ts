@@ -16,6 +16,8 @@ export interface JournalDraft {
   action: string;
   symbol?: string | null;
   chain?: string | null;
+  /** Mint or contract. Null when the card has no address. */
+  address?: string | null;
   size?: number | null;
   price?: number | null;
   pnl?: number | null;
@@ -33,6 +35,8 @@ export interface JournalRow {
   action: string;
   symbol: string | null;
   chain: string | null;
+  /** Mint or contract. Null on older rows and on drills with no mint. */
+  address: string | null;
   size: number | null;
   price: number | null;
   pnl: number | null;
@@ -61,6 +65,7 @@ export function stampDrafts(
     action: draft.action,
     symbol: draft.symbol ?? null,
     chain: draft.chain ?? null,
+    address: draft.address ?? null,
     size: draft.size ?? null,
     price: draft.price ?? null,
     pnl: draft.pnl ?? null,
@@ -171,6 +176,7 @@ function normalizeRow(parsed: Partial<JournalRow>): JournalRow {
     action: String(parsed.action),
     symbol: parsed.symbol ?? null,
     chain: parsed.chain ?? null,
+    address: parsed.address ?? null,
     size: parsed.size ?? null,
     price: parsed.price ?? null,
     pnl: parsed.pnl ?? null,

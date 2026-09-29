@@ -4,6 +4,7 @@ import { writeJournalExport } from "../team/export.js";
 import { executionGate } from "../team/gate.js";
 import { appendJournalRows, loadJournalRows, stampDrafts } from "../team/journal.js";
 import { formatLearnSummary, summarizeJournal } from "../team/learn.js";
+import { settleJournalMarks } from "../team/shadow.js";
 import { exportDir, shouldPersistJournal } from "../team/paths.js";
 import { renderDesk } from "../team/render.js";
 import { loadSession, saveSession } from "../team/session.js";
@@ -52,6 +53,16 @@ function persistTurn(ctx: Context, userId: string, events: Parameters<typeof sta
 
 async function replyLearn(ctx: Context): Promise<void> {
   const userId = String(ctx.from?.id ?? "");
+  if (shouldPersistJournal()) {
+    try {
+      await settleJournalMarks({ userId });
+    } catch (err) {
+      console.warn(
+        "[bba] mark settle failed",
+        err instanceof Error ? err.message : "error",
+      );
+    }
+  }
   const rows = shouldPersistJournal() ? loadJournalRows({ userId }) : [];
   const text = formatLearnSummary(summarizeJournal(rows));
   await ctx.reply(renderDesk([{ speaker: "ledger", text }]), {

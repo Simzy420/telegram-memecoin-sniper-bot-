@@ -32,6 +32,7 @@ function row(partial: Partial<JournalRow> & Pick<JournalRow, "timestamp" | "agen
     session_id: "sess-1",
     symbol: null,
     chain: null,
+    address: null,
     size: null,
     price: null,
     pnl: null,

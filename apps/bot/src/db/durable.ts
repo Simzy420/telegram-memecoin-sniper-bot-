@@ -48,7 +48,8 @@ export function migrateDurable(db: DatabaseSync): void {
       pnl REAL,
       shield_reasons TEXT NOT NULL,
       tags TEXT NOT NULL,
-      mode TEXT NOT NULL
+      mode TEXT NOT NULL,
+      address TEXT
     );
     CREATE INDEX IF NOT EXISTS journal_events_user_time
       ON journal_events (user_id, timestamp);
@@ -76,6 +77,10 @@ export function migrateDurable(db: DatabaseSync): void {
       value TEXT NOT NULL
     );
   `);
+  const columns = db.prepare("PRAGMA table_info(journal_events)").all() as Array<{ name?: string }>;
+  if (!columns.some((column) => column.name === "address")) {
+    db.exec("ALTER TABLE journal_events ADD COLUMN address TEXT");
+  }
 }
 
 export function insertJournalRows(db: DatabaseSync, rows: JournalRow[]): void {
@@ -83,8 +88,8 @@ export function insertJournalRows(db: DatabaseSync, rows: JournalRow[]): void {
   const insert = db.prepare(`
     INSERT INTO journal_events (
       timestamp, day, session_id, user_id, agent, action, symbol, chain,
-      size, price, pnl, shield_reasons, tags, mode
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      size, price, pnl, shield_reasons, tags, mode, address
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   db.exec("BEGIN");
   try {
@@ -104,6 +109,7 @@ export function insertJournalRows(db: DatabaseSync, rows: JournalRow[]): void {
         JSON.stringify(row.shield_reasons),
         JSON.stringify(row.tags),
         row.mode,
+        row.address,
       );
     }
     db.exec("COMMIT");
@@ -130,7 +136,7 @@ export function listJournal(
   const where = clauses.length ? `WHERE ${clauses.join(" AND ")}` : "";
   const result = db
     .prepare(
-      `SELECT timestamp, session_id, user_id, agent, action, symbol, chain, size, price, pnl, shield_reasons, tags, mode
+      `SELECT timestamp, session_id, user_id, agent, action, symbol, chain, address, size, price, pnl, shield_reasons, tags, mode
        FROM journal_events ${where} ORDER BY timestamp, id`,
     )
     .all(...params);
@@ -146,6 +152,7 @@ function parseJournalRow(raw: Record<string, unknown>): JournalRow {
     action: String(raw.action),
     symbol: raw.symbol == null ? null : String(raw.symbol),
     chain: raw.chain == null ? null : String(raw.chain),
+    address: raw.address == null ? null : String(raw.address),
     size: raw.size == null ? null : Number(raw.size),
     price: raw.price == null ? null : Number(raw.price),
     pnl: raw.pnl == null ? null : Number(raw.pnl),

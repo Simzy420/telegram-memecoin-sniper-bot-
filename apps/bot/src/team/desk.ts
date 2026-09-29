@@ -25,7 +25,7 @@ import {
 import { personaNameList, PERSONAS, SPECIALIST_IDS, type SpecialistId } from "./personas.js";
 import type { Line } from "./render.js";
 import { routeUserText } from "./router.js";
-import { formatShield, runShield, type ShieldReport } from "./safety.js";
+import { formatShield, runShield, shieldFlagTags, type ShieldReport } from "./safety.js";
 
 const HELP =
   "Talk to me in this chat. The troop answers under their own names.\n" +
@@ -35,6 +35,7 @@ const HELP =
   `${PAPER_POLICY_LINE}\n` +
   "Entry waits on Shield. A pass is still not a live buy, and this build does not broadcast.\n" +
   "Still UNKNOWN, so CAUTION rather than PASS: RugCheck down (LP lock and pool honeypot), a Token-2022 transfer hook, no liquidity number from DexScreener or RugCheck, and EVM tax, LP, or honeypot other than an empty-bytecode block.\n" +
+  "A blocked name stores a decision mark when the tape has one. Fifteen minutes later a shadow mark labels that block. It is not a fill. An open clip gets a 15-minute horizon mark. It is not a close.\n" +
   "/learn — Ledger reads the journal: win rate, expectancy, Shield blocks. No invented fills.\n" +
   "/export — dump the journal as CSV and JSONL for a backtest.\n" +
   "Ledger shows the entry mark and open mark-to-market PnL when a DexScreener price was read.\n" +
@@ -162,6 +163,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
           draft("scout", "scan", {
             symbol: candidate.symbol,
             chain: candidate.chain,
+            address: candidate.address,
             tags: [`feed:${discovery.feed}`, "scan"],
           }),
         );
@@ -169,8 +171,9 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
     }
     if (route.intent === "watch" && top) {
       const report = runShield(top);
+      const mark = await decisionMark(report.verdict, top, input.fetchImpl);
       lines.push({ speaker: "shield", text: formatShield(report) });
-      events.push(shieldDraft(top, report));
+      events.push(shieldDraft(top, report, mark));
     }
     if (route.intent === "watch" || route.intent === "pulse") {
       lines.push({
@@ -181,6 +184,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
         draft("pulse", "tape", {
           symbol: top?.symbol ?? null,
           chain: top?.chain ?? null,
+          address: top?.address ?? null,
           tags: ["tape"],
         }),
       );
@@ -204,7 +208,8 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
       ]);
     }
     const report = runShield(found.candidate);
-    events.push(shieldDraft(found.candidate, report));
+    const mark = await decisionMark(report.verdict, found.candidate, input.fetchImpl);
+    events.push(shieldDraft(found.candidate, report, mark));
     return done(state, [
       {
         speaker: "boss",
@@ -250,8 +255,8 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
       ]);
     }
     const report = runShield(found.candidate);
-    events.push(shieldDraft(found.candidate, report));
     if (gate.liveEnabled) {
+      events.push(shieldDraft(found.candidate, report));
       const size = paperClipUsd(report.verdict) ?? 0;
       const live = submitLiveOrder(
         {
@@ -267,6 +272,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
         draft("sniper", "live_refused", {
           symbol: found.candidate.symbol,
           chain: found.candidate.chain,
+          address: found.candidate.address,
           size: report.verdict === "block" ? null : size,
           shieldReasons: shieldReasonList(report),
           tags: ["stub", "no-broadcast", `verdict:${report.verdict}`, strategyTag(report.verdict)],
@@ -283,14 +289,13 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
         { speaker: "ledger", text: formatLedger(state) },
       ]);
     }
-    const entryPriceUsd =
-      report.verdict === "block"
-        ? null
-        : await fetchTokenMarkUsd(
-            found.candidate.chain,
-            found.candidate.address,
-            input.fetchImpl,
-          );
+    const decision = await fetchTokenMarkUsd(
+      found.candidate.chain,
+      found.candidate.address,
+      input.fetchImpl,
+    );
+    events.push(shieldDraft(found.candidate, report, decision));
+    const entryPriceUsd = report.verdict === "block" ? null : decision;
     const opened = openPaperPosition(
       state,
       found.candidate,
@@ -305,17 +310,24 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
         draft("sniper", "paper_fill", {
           symbol: opened.position.symbol,
           chain: opened.position.chain,
+          address: opened.position.address,
           size: opened.position.sizeUsd,
           price: opened.position.entryPriceUsd ?? null,
           pnl: null,
           shieldReasons: shieldReasonList(report),
-          tags: ["fill", `verdict:${report.verdict}`, strategyTag(report.verdict)],
+          tags: [
+            "fill",
+            `verdict:${report.verdict}`,
+            strategyTag(report.verdict),
+            ...shieldFlagTags(report),
+          ],
         }),
       );
       events.push(
         draft("ledger", "book", {
           symbol: opened.position.symbol,
           chain: opened.position.chain,
+          address: opened.position.address,
           size: opened.position.sizeUsd,
           price: opened.position.entryPriceUsd ?? null,
           tags: ["book", "position_opened"],
@@ -326,14 +338,21 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
         draft("sniper", "refused", {
           symbol: found.candidate.symbol,
           chain: found.candidate.chain,
+          address: found.candidate.address,
           shieldReasons: shieldReasonList(report),
           tags: ["refused", `verdict:${report.verdict}`],
         }),
       );
     }
+    const blockNote =
+      report.verdict === "block"
+        ? decision == null
+          ? "No decision mark, so the 15m shadow waits."
+          : "Decision mark stored. A 15m shadow mark labels the block and is not a fill."
+        : "";
     const sniperText = isNewFill
       ? `Paper entry ${found.candidate.symbol} ${usd(opened.position!.sizeUsd)} on ${found.candidate.chain}. ${opened.position!.note} ${gate.detail}`
-      : `${opened.reason} ${gate.detail}`;
+      : [opened.reason, blockNote, gate.detail].filter(Boolean).join(" ");
     return done(state, [
       {
         speaker: "boss",
@@ -374,6 +393,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
       draft("sniper", "paper_close", {
         symbol: closed.closed.symbol,
         chain: closed.closed.chain,
+        address: closed.closed.address,
         size: closed.closed.sizeUsd,
         price: closed.exitPriceUsd,
         pnl: closed.journalPnlUsd,
@@ -384,6 +404,7 @@ export async function handleDeskTurn(input: DeskTurnInput): Promise<DeskTurn> {
       draft("ledger", "book", {
         symbol: closed.closed.symbol,
         chain: closed.closed.chain,
+        address: closed.closed.address,
         size: closed.closed.sizeUsd,
         price: closed.exitPriceUsd,
         pnl: closed.journalPnlUsd,
@@ -422,6 +443,7 @@ function draft(
     action,
     symbol: extra.symbol ?? null,
     chain: extra.chain ?? null,
+    address: extra.address ?? null,
     size: extra.size ?? null,
     price: extra.price ?? null,
     pnl: extra.pnl ?? null,
@@ -431,13 +453,29 @@ function draft(
   };
 }
 
-function shieldDraft(candidate: Candidate, report: ShieldReport): JournalDraft {
+function shieldDraft(
+  candidate: Candidate,
+  report: ShieldReport,
+  mark: number | null = null,
+): JournalDraft {
   return draft("shield", "check", {
     symbol: candidate.symbol,
     chain: candidate.chain,
+    address: candidate.address,
+    price: mark,
     shieldReasons: shieldReasonList(report),
-    tags: ["check", `verdict:${report.verdict}`],
+    tags: ["check", `verdict:${report.verdict}`, ...shieldFlagTags(report)],
   });
+}
+
+/** Paper blocks keep a decision mark for the 15m shadow. Pass and caution marks are entries. */
+async function decisionMark(
+  verdict: ShieldReport["verdict"],
+  candidate: Candidate,
+  fetchImpl?: typeof fetch,
+): Promise<number | null> {
+  if (verdict !== "block") return null;
+  return fetchTokenMarkUsd(candidate.chain, candidate.address, fetchImpl);
 }
 
 function shieldReasonList(report: ShieldReport): string[] {

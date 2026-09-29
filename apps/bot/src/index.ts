@@ -5,6 +5,7 @@ import { migrate, userStoreKind } from "./db/users.js";
 import { registerHandlers } from "./handlers/commands.js";
 import { startNightlyLearn } from "./team/nightly.js";
 import { isLearnPollPath, writeLearnPoll } from "./team/learn-http.js";
+import { settleJournalMarks } from "./team/shadow.js";
 import { durableDbPath, journalRoot } from "./team/paths.js";
 
 const COMMANDS = [
@@ -62,7 +63,16 @@ function listenHttp(bot: Bot | null): void {
         return;
       }
       if (req.method === "GET" && isLearnPollPath(pathname)) {
-        writeLearnPoll(req, res);
+        void settleJournalMarks()
+          .catch((err) => {
+            console.error(
+              "[bba] mark settle failed",
+              err instanceof Error ? err.message : "error",
+            );
+          })
+          .finally(() => {
+            if (!res.headersSent) writeLearnPoll(req, res);
+          });
         return;
       }
       if (req.method === "GET" && (pathname === "/" || pathname === "/health")) {
@@ -93,8 +103,18 @@ function maybeNightly(bot: Bot): void {
   console.log("[bba] nightly journal summary armed. Chat id not printed.");
 }
 
+function startMarkSettle(): void {
+  const timer = setInterval(() => {
+    void settleJournalMarks().catch((err) => {
+      console.error("[bba] mark settle failed", err instanceof Error ? err.message : "error");
+    });
+  }, 60_000);
+  timer.unref();
+}
+
 async function main(): Promise<void> {
   assertRuntimeConfig();
+  startMarkSettle();
   console.log(`[bba] durable db ${durableDbPath()}`);
   console.log(`[bba] journal ${journalRoot()}/days/YYYY-MM-DD/events.jsonl`);
 

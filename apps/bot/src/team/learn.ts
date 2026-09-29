@@ -23,6 +23,8 @@ export interface LearnSummary {
   bottomSymbols: RankedName[];
   topStrategies: RankedName[];
   bottomStrategies: RankedName[];
+  horizonMarks: number;
+  horizonExpectancy: number | null;
   inventedFills: false;
 }
 
@@ -44,6 +46,12 @@ export function summarizeJournal(rows: JournalRow[]): LearnSummary {
   const shield = scoreShield(rows, decided);
   const symbols = rank(sumBy(decided, (row) => row.symbol));
   const strategies = rank(sumBy(decided, strategyName));
+  const horizons = rows.filter((row) => row.action === "horizon_mark" && typeof row.pnl === "number");
+  const horizonDecided = horizons.filter((row) => row.pnl !== 0);
+  const horizonExpectancy =
+    horizonDecided.length === 0
+      ? null
+      : horizonDecided.reduce((sum, row) => sum + (row.pnl ?? 0), 0) / horizonDecided.length;
 
   return {
     rows: rows.length,
@@ -62,6 +70,8 @@ export function summarizeJournal(rows: JournalRow[]): LearnSummary {
     bottomSymbols: symbols.bottom,
     topStrategies: strategies.top,
     bottomStrategies: strategies.bottom,
+    horizonMarks: horizons.length,
+    horizonExpectancy,
     inventedFills: false,
   };
 }
@@ -73,6 +83,7 @@ export function formatLearnSummary(summary: LearnSummary): string {
     expectancyLine(summary),
     flatLine(summary),
     shieldLine(summary),
+    horizonLine(summary),
     rankLine("Top symbols", summary.topSymbols),
     rankLine("Bottom symbols", summary.bottomSymbols),
     rankLine("Top strategies", summary.topStrategies),
@@ -107,6 +118,16 @@ function flatLine(summary: LearnSummary): string {
   return `Flat closes excluded: ${summary.flatExcluded}. PnL was exactly 0, so they are not counted as wins or losses.`;
 }
 
+function horizonLine(summary: LearnSummary): string {
+  if (summary.horizonMarks === 0) {
+    return "Horizon marks (15m): none yet. A horizon mark is not an extra fill.";
+  }
+  if (summary.horizonExpectancy == null) {
+    return `Horizon marks (15m): ${summary.horizonMarks} flat. Not extra fills.`;
+  }
+  return `Horizon marks (15m): ${summary.horizonMarks}, expectancy ${usd(summary.horizonExpectancy)}. Not extra fills.`;
+}
+
 function shieldLine(summary: LearnSummary): string {
   if (summary.shieldBlocks === 0) {
     return "Shield block accuracy: no Shield blocks in the journal.";
@@ -115,7 +136,7 @@ function shieldLine(summary: LearnSummary): string {
     return `Shield block accuracy: not enough labelled outcomes (${summary.shieldBlocks} blocks, ${summary.shieldUnlabelled} unlabelled). Unlabelled blocks are not scored.`;
   }
   const pct = (summary.shieldAccuracy * 100).toFixed(1);
-  return `Shield block accuracy: ${pct}% (${summary.shieldCorrect} correct, ${summary.shieldWrong} wrong, ${summary.shieldUnlabelled} unlabelled). A block is labelled only when a later realised close on that symbol has non-zero PnL.`;
+  return `Shield block accuracy: ${pct}% (${summary.shieldCorrect} correct, ${summary.shieldWrong} wrong, ${summary.shieldUnlabelled} unlabelled). A block is labelled by a 15m shadow mark, or by a later realised close when no shadow was stored. A shadow mark is not a fill.`;
 }
 
 function rankLine(label: string, ranks: RankedName[]): string {
@@ -134,12 +155,16 @@ function scoreShield(
   let wrong = 0;
   let unlabelled = 0;
   for (const block of blocks) {
-    const later = decided.filter(
-      (row) =>
-        row.symbol === block.symbol &&
-        row.user_id === block.user_id &&
-        row.timestamp > block.timestamp,
-    );
+    const shadows = shadowRows(rows, block);
+    const later =
+      shadows.length > 0
+        ? shadows.filter((row) => typeof row.pnl === "number" && row.pnl !== 0)
+        : decided.filter(
+            (row) =>
+              row.symbol === block.symbol &&
+              row.user_id === block.user_id &&
+              row.timestamp > block.timestamp,
+          );
     if (later.length === 0) {
       unlabelled += 1;
       continue;
@@ -157,6 +182,14 @@ function scoreShield(
     unlabelled,
     accuracy: labelled === 0 ? null : correct / labelled,
   };
+}
+
+function shadowRows(rows: JournalRow[], block: JournalRow): JournalRow[] {
+  if (!block.symbol) return [];
+  const tag = `anchor:check:${block.timestamp}:${block.symbol}`;
+  return rows.filter(
+    (row) => row.action === "shadow_mark" && row.user_id === block.user_id && row.tags.includes(tag),
+  );
 }
 
 function verdictOf(row: JournalRow): string | null {

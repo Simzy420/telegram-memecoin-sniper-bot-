@@ -117,6 +117,15 @@ const MARK: Record<FlagStatus, string> = {
   unknown: "UNKNOWN",
 };
 
+/** Stable tags for the journal. Example: flag:lp-lock=unknown. */
+export function shieldFlagTags(report: ShieldReport): string[] {
+  return report.flags.map((flag) => `flag:${flagKey(flag.label)}=${flag.status}`);
+}
+
+function flagKey(label: string): string {
+  return label.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "");
+}
+
 export function formatShield(report: ShieldReport): string {
   const lines = report.flags.map(
     (f) => `${MARK[f.status]} ${f.label} — ${f.detail}`,
