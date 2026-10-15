@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import path from 'node:path';
 import { createRequire } from 'node:module';
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
 
 const root = process.cwd();
 const configPath = path.join(root, '.vercel', 'output', 'config.json');
@@ -18,28 +19,58 @@ const entries = [
   ['api/accounts.ts', 'api/accounts.func'],
 ];
 
+// The repo root package.json is "type": "module". Without a local
+// package.json in each .func directory, Node/Vercel loads index.js as ESM,
+// hits `module is not defined`, and production Sign-in/Drive return
+// FUNCTION_INVOCATION_FAILED.
+const FOOTER =
+  'module.exports = typeof handler === "function" ? handler : (module.exports.default || module.exports);\n';
+
 for (const [entry, funcDir] of entries) {
-  const outfile = path.join(root, '.vercel', 'output', 'functions', funcDir, 'index.js');
-  mkdirSync(path.dirname(outfile), { recursive: true });
+  const funcRoot = path.join(root, '.vercel', 'output', 'functions', funcDir);
+  const outfile = path.join(funcRoot, 'index.js');
+  mkdirSync(funcRoot, { recursive: true });
   await esbuild.build({
     entryPoints: [path.join(root, entry)],
     bundle: true,
     platform: 'node',
     format: 'cjs',
-    target: 'node22',
+    target: 'node20',
     outfile,
-    footer: { js: 'module.exports = module.exports.default || module.exports;\n' },
+    footer: { js: FOOTER },
   });
+  writeFileSync(path.join(funcRoot, 'package.json'), `${JSON.stringify({ type: 'commonjs' }, null, 2)}\n`);
   writeFileSync(
-    path.join(path.dirname(outfile), '.vc-config.json'),
+    path.join(funcRoot, '.vc-config.json'),
     `${JSON.stringify({
-      runtime: 'nodejs22.x',
+      runtime: 'nodejs20.x',
       handler: 'index.js',
       launcherType: 'Nodejs',
       shouldAddHelpers: true,
       maxDuration: 30,
     }, null, 2)}\n`,
   );
+
+  // Verify outside the ESM package root (tmp .cjs) so require works locally.
+  const probe = path.join(os.tmpdir(), `cc-fn-probe-${funcDir.replace(/[^\w]+/g, '-')}.cjs`);
+  writeFileSync(probe, readFileSync(outfile));
+  try {
+    const resolved = require.resolve(probe);
+    delete require.cache[resolved];
+    const mod = require(resolved);
+    if (typeof mod !== 'function') {
+      throw new Error(
+        `Bundled ${entry} did not export a function handler (got ${typeof mod}). Refusing to ship a broken login/Drive API.`,
+      );
+    }
+    delete require.cache[resolved];
+  } finally {
+    try {
+      unlinkSync(probe);
+    } catch {
+      /* ignore */
+    }
+  }
 }
 
 const config = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -58,4 +89,4 @@ config.routes = [
   }),
 ];
 writeFileSync(configPath, `${JSON.stringify(config, null, 2)}\n`);
-console.log('Attached Google Drive functions to the Vercel build output.');
+console.log('Attached Google Drive + accounts functions to the Vercel build output.');
