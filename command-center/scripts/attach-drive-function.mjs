@@ -13,10 +13,10 @@ if (!existsSync(configPath)) {
 const require = createRequire(import.meta.url);
 const esbuild = require('esbuild');
 const entries = [
-  ['api/drive/session.ts', 'api/drive/session.func'],
-  ['api/drive/files.ts', 'api/drive/files.func'],
-  ['api/drive/files/[id].ts', 'api/drive/files/[id].func'],
-  ['api/accounts.ts', 'api/accounts.func'],
+  ['serverless-src/drive/session.ts', 'api/drive/session.func'],
+  ['serverless-src/drive/files.ts', 'api/drive/files.func'],
+  ['serverless-src/drive/files/[id].ts', 'api/drive/files/[id].func'],
+  ['serverless-src/accounts.ts', 'api/accounts.func'],
 ];
 
 // The repo root package.json is "type": "module". Without a local

@@ -14,7 +14,12 @@ Sign-in (`/api/accounts`) and Drive unlock (`/api/drive/session`) are **bundled 
 
 On 2026-10-15, git deploys from this telegram-repo mirror (`cursor/command-center-swapr-mix-bb0e`) reached production and made both endpoints return `FUNCTION_INVOCATION_FAILED` (HTTP 500). That blocked Dark Command Center login. Production was restored by promoting the last known-good Build Output deploy (`dpl_5rPvYT9FAydMfTZQZkj6HVcm2BmQ`).
 
-Root cause: the repo `package.json` sets `"type": "module"`, so Vercel loaded the bundled CJS `index.js` handlers as ESM (`module is not defined`). Each `.func` directory now ships its own `package.json` with `"type": "commonjs"`.
+Root cause (confirmed in runtime logs): Vercel auto-detected the source `api/` directory as Serverless Functions and ran unbundled `api/drive/session.js`, which then failed with `Cannot find module '.../api/_lib/handle.ts'`. The Build Output bundles never got to answer.
+
+Fixes:
+1. Source handlers live in `serverless-src/` (not `api/`), so Vercel does not auto-detect them.
+2. `scripts/attach-drive-function.mjs` still emits Build Output functions at `/api/*`.
+3. Each `.func` also ships `"type": "commonjs"` so Node does not treat the CJS bundle as ESM.
 
 Before any production alias change:
 

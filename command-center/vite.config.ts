@@ -16,7 +16,7 @@ export default defineConfig({
     {
       name: 'accounts-api',
       async configureServer(server) {
-        const { handleAccountsRequest } = await import('./api/_lib/accounts.ts');
+        const { handleAccountsRequest } = await import('./serverless-src/_lib/accounts.ts');
         server.middlewares.use((req, res, next) => {
           if (!req.url?.startsWith('/api/accounts')) {
             next();
@@ -32,7 +32,7 @@ export default defineConfig({
         });
       },
       async configurePreviewServer(server) {
-        const { handleAccountsRequest } = await import('./api/_lib/accounts.ts');
+        const { handleAccountsRequest } = await import('./serverless-src/_lib/accounts.ts');
         server.middlewares.use((req, res, next) => {
           if (!req.url?.startsWith('/api/accounts')) {
             next();
@@ -51,7 +51,7 @@ export default defineConfig({
     {
       name: 'drive-api',
       async configureServer(server) {
-        const { handleDriveRequest } = await import('./api/_lib/handle.ts');
+        const { handleDriveRequest } = await import('./serverless-src/_lib/handle.ts');
         server.middlewares.use((req, res, next) => {
           if (!req.url?.startsWith('/api/drive')) {
             next();
@@ -67,7 +67,7 @@ export default defineConfig({
         });
       },
       async configurePreviewServer(server) {
-        const { handleDriveRequest } = await import('./api/_lib/handle.ts');
+        const { handleDriveRequest } = await import('./serverless-src/_lib/handle.ts');
         server.middlewares.use((req, res, next) => {
           if (!req.url?.startsWith('/api/drive')) {
             next();

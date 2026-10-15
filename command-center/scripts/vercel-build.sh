@@ -1,5 +1,5 @@
 #!/bin/sh
-# Vercel sometimes runs this command with cwd set to api/.
+# Vercel sometimes runs this command with cwd set to a traced function dir.
 # npm still builds the repo root, then the output check looks in the
 # original cwd. Build at the package root and mirror the result back.
 set -eu
@@ -9,7 +9,7 @@ echo "CC_START=$START"
 echo "CC_ROOT=$ROOT"
 cd "$ROOT"
 npm run build
-# Node traces api/ before the static build. package.json "vercel-build"
+# Node used to trace api/ before the static build. package.json "vercel-build"
 # emits the JS module that import resolves, and this repeats it here so the
 # file exists even if only the project build command runs.
 npm run vercel-build
