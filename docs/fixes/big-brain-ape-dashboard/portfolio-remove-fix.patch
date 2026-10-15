@@ -1,0 +1,55 @@
+diff --git a/app35.html b/app35.html
+index fe3da4c..3e41ccb 100644
+--- a/app35.html
++++ b/app35.html
+@@ -1137,8 +1137,8 @@ container.innerHTML='<div id="portfolioSummary" style="padding:16px"><div class=
+ '<button onclick="window.clearPortfolioConfirm()" style="background:transparent;border:1px solid var(--border);color:var(--text2);font-size:15px;padding:10px 20px;border-radius:10px;cursor:pointer">Clear All</button>'+
+ '</div>';
+ 
+-// Fetch all prices
+-var promises=holdings.map(function(h){
++// Fetch all prices — keep storageIndex so Remove targets the real holding after value-sort
++var promises=holdings.map(function(h, storageIndex){
+ var isCrypto=CRYPTO_COIN_MAP[h.symbol.toUpperCase()];
+ if(isCrypto){
+ return fetch('https://api.coingecko.com/api/v3/simple/price?ids='+isCrypto+'&vs_currencies=usd&include_24hr_change=true')
+@@ -1146,7 +1146,7 @@ return fetch('https://api.coingecko.com/api/v3/simple/price?ids='+isCrypto+'&vs_
+ .then(function(d){
+ var price=d[isCrypto]?d[isCrypto].usd:0;
+ var change=d[isCrypto]?d[isCrypto].usd_24h_change:0;
+-return {symbol:h.symbol,shares:h.shares,buyPrice:h.buyPrice,currentPrice:price,change:change};
++return {symbol:h.symbol,shares:h.shares,buyPrice:h.buyPrice,added:h.added,storageIndex:storageIndex,currentPrice:price,change:change};
+ });
+ }else{
+ return fetch('https://finnhub.io/api/v1/quote?symbol='+h.symbol.toUpperCase()+'&token='+FINNHUB_KEY)
+@@ -1154,7 +1154,7 @@ return fetch('https://finnhub.io/api/v1/quote?symbol='+h.symbol.toUpperCase()+'&
+ .then(function(d){
+ var price=d.c||0;
+ var change=d.dp||0;
+-return {symbol:h.symbol,shares:h.shares,buyPrice:h.buyPrice,currentPrice:price,change:change};
++return {symbol:h.symbol,shares:h.shares,buyPrice:h.buyPrice,added:h.added,storageIndex:storageIndex,currentPrice:price,change:change};
+ });
+ }
+ });
+@@ -1198,7 +1198,7 @@ listHtml+='<div style="background:var(--card);border:1px solid var(--border);bor
+ '<div style="text-align:right">'+
+ '<div style="font-size:18px;font-weight:700">$'+r.currentPrice.toLocaleString('en-US',{minimumFractionDigits:2,maximumFractionDigits:2})+'</div>'+
+ '<div style="font-size:13px;color:'+dayC+'">'+(r.change>=0?'+':'')+r.change.toFixed(2)+'% today</div>'+
+-'<button onclick="window.removeHolding('+idx+')" style="margin-top:6px;background:transparent;border:none;color:var(--text2);font-size:12px;cursor:pointer;text-decoration:underline">Remove</button>'+
++'<button onclick="window.removeHolding('+r.storageIndex+')" style="margin-top:6px;background:transparent;border:none;color:var(--text2);font-size:12px;cursor:pointer;text-decoration:underline">Remove</button>'+
+ '</div>'+
+ '</div>';
+ });
+@@ -1262,9 +1262,10 @@ if(modal)modal.remove();
+ window.loadPortfolio();
+ };
+ 
+-window.removeHolding=function(idx){
++window.removeHolding=function(storageIndex){
+ var p=getPortfolio();
+-p.splice(idx,1);
++if(storageIndex<0||storageIndex>=p.length)return;
++p.splice(storageIndex,1);
+ savePortfolio(p);
+ syncPortfolioToCloud();
+ window.loadPortfolio();
