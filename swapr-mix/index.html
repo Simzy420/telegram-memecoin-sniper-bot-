@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#0b0b0f" />
+    <title>Swapr Mix — keep the props</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script src="/config.js"></script>
+  </head>
+  <body>
+    <div id="app">
+      <header class="top">
+        <p class="product-badge">Swapr Mix</p>
+        <h1>Keep the props</h1>
+        <p class="sub">Pick a motion, mark the person and any object to keep, then upload your still. Original Swapr stays unchanged.</p>
+        <button type="button" id="btn-howto" class="howto-launch" aria-haspopup="dialog" aria-controls="howto-dialog">
+          How Mix works
+        </button>
+      </header>
+
+      <section class="section" aria-labelledby="motions-heading">
+        <div class="section-head">
+          <h2 id="motions-heading">Motions</h2>
+          <button type="button" id="btn-refresh" class="ghost">Refresh</button>
+        </div>
+        <p class="muted rail-hint">Swipe sideways. Clips autoplay muted. Tap one to continue.</p>
+        <div id="template-rail" class="rail" role="list" aria-label="Template motions"></div>
+        <p id="templates-status" class="muted" aria-live="polite">Loading templates…</p>
+      </section>
+
+      <section class="section" id="selected-panel" hidden>
+        <h2 class="sr-only">Selected motion</h2>
+        <div class="card selected-card">
+          <div>
+            <p class="eyebrow">Selected motion</p>
+            <h3 id="selected-title">—</h3>
+            <p id="selected-desc" class="muted"></p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section is-locked" id="mask-section" hidden aria-disabled="true">
+        <h2>Mark person &amp; props</h2>
+        <p class="muted" id="mask-hint">
+          Green = person to replace. Red = objects to keep from the template (popsicle, cup, phone…).
+        </p>
+        <div class="mask-tools" role="group" aria-label="Mark mode">
+          <button type="button" id="mask-mode-person" class="mask-mode active" aria-pressed="true">Mark person</button>
+          <button type="button" id="mask-mode-prop" class="mask-mode" aria-pressed="false">Mark keep</button>
+          <button type="button" id="mask-clear" class="ghost">Clear marks</button>
+        </div>
+        <div class="mask-stage">
+          <canvas id="mask-canvas" width="360" height="640" aria-label="Tap the template frame to mark"></canvas>
+        </div>
+        <p id="mask-status" class="muted" aria-live="polite">No marks yet.</p>
+      </section>
+
+      <section class="section is-locked" id="upload-section" tabindex="-1" aria-disabled="true">
+        <h2>Your photo</h2>
+        <p id="upload-hint" class="muted">Pick a motion above to unlock this step.</p>
+        <label class="upload-zone" id="upload-zone">
+          <input type="file" id="photo-input" accept="image/*" hidden disabled />
+          <div class="upload-inner" id="upload-inner">
+            <div class="upload-icon" aria-hidden="true">⬆</div>
+            <strong>Tap to upload a still of yourself</strong>
+            <span class="muted">JPG / PNG · face or full body works best</span>
+          </div>
+          <img id="photo-preview" alt="" hidden />
+        </label>
+      </section>
+
+      <section class="section">
+        <h2>Prompt <span class="muted">(optional)</span></h2>
+        <textarea id="prompt" rows="3" placeholder="keep the popsicle, replace only the person…">the person in the reference photo, replace only that person, keep every handheld object from the template unchanged and real</textarea>
+      </section>
+
+      <section class="section actions">
+        <button type="button" id="btn-generate" class="primary" disabled>Generate Mix</button>
+        <p class="muted">Uses Wan Animate replace with your SAM marks on Runpod. The first Generate may take several minutes while the worker starts. Leave this tab open.</p>
+        <p id="gen-status" class="muted" aria-live="polite"></p>
+      </section>
+
+      <section class="section runpod-box">
+        <p id="runpod-balance" class="muted" aria-live="polite">Runpod balance…</p>
+        <button type="button" id="btn-stop-gpu" class="secondary">Stop GPU</button>
+        <p id="stop-status" class="muted" aria-live="polite"></p>
+      </section>
+
+      <section class="section" id="result-panel" hidden>
+        <h2>Result</h2>
+        <div class="card">
+          <video id="result-video" playsinline controls></video>
+          <div class="row">
+            <a id="btn-download" class="secondary" href="#" download="swapr-mix.mp4">Download</a>
+            <button type="button" id="btn-save-photos" class="secondary">Save to Photos</button>
+          </div>
+        </div>
+
+        <details class="extend-box">
+          <summary>Extend for a longer clip</summary>
+          <p class="muted">Extend still uses the Hugging Face Space and cannot continue a Runpod clip.</p>
+          <label class="field">Target seconds
+            <input type="range" id="extend-target" min="8" max="22" value="12" />
+            <span id="extend-target-val">12s</span>
+          </label>
+          <div class="row">
+            <button type="button" id="btn-extend" class="secondary">Extend once</button>
+            <button type="button" id="btn-auto-extend" class="secondary">Auto-extend</button>
+          </div>
+        </details>
+      </section>
+
+      <footer class="foot muted">
+        Swapr Mix · person-mask replace · original Swapr left as-is
+      </footer>
+    </div>
+
+    <dialog id="howto-dialog" class="howto" aria-labelledby="howto-title">
+      <div class="howto-bar">
+        <h2 id="howto-title">How Mix works</h2>
+        <button type="button" id="btn-howto-close" class="ghost">Close</button>
+      </div>
+
+      <h3>Why this exists</h3>
+      <p>
+        Original <strong>Swapr</strong> (Become the Character) is unchanged.
+        Mix is a separate app that sends <strong>SAM control points</strong> so Wan Animate
+        replaces the person and can leave handheld props alone when you mark them.
+      </p>
+
+      <h3>Use Mix</h3>
+      <ol>
+        <li><strong>Pick a motion</strong> from the gallery.</li>
+        <li><strong>Mark person</strong> — tap green on the body/face to replace.</li>
+        <li><strong>Mark keep</strong> — tap red on props (popsicle, cup, phone) that must stay from the template.</li>
+        <li><strong>Upload your still</strong> of the person (a still that includes the prop helps even more).</li>
+        <li>Tap <strong>Generate Mix</strong>. Leave the tab open while Runpod runs.</li>
+      </ol>
+
+      <h3>Templates</h3>
+      <p>
+        Same catalog as Swapr:
+        <a href="https://huggingface.co/datasets/Simzy/wan22-template-clips" target="_blank" rel="noreferrer">Simzy/wan22-template-clips</a>.
+      </p>
+      <p class="muted">
+        Original Swapr stays at
+        <a href="https://wan22-templates.vercel.app/" target="_blank" rel="noreferrer">wan22-templates.vercel.app</a>
+        and
+        <a href="https://swapr-casey.netlify.app/" target="_blank" rel="noreferrer">swapr-casey.netlify.app</a>.
+      </p>
+    </dialog>
+
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
