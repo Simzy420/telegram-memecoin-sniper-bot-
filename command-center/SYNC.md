@@ -20,6 +20,7 @@ Fixes:
 1. Source handlers live in `serverless-src/` (not `api/`), so Vercel does not auto-detect them.
 2. `scripts/attach-drive-function.mjs` still emits Build Output functions at `/api/*`.
 3. Each `.func` also ships `"type": "commonjs"` so Node does not treat the CJS bundle as ESM.
+4. Function runtime is `nodejs22.x` (`nodejs20.x` is discontinued on Vercel).
 
 Before any production alias change:
 

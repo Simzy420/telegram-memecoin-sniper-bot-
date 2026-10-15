@@ -35,7 +35,7 @@ for (const [entry, funcDir] of entries) {
     bundle: true,
     platform: 'node',
     format: 'cjs',
-    target: 'node20',
+    target: 'node22',
     outfile,
     footer: { js: FOOTER },
   });
@@ -43,7 +43,8 @@ for (const [entry, funcDir] of entries) {
   writeFileSync(
     path.join(funcRoot, '.vc-config.json'),
     `${JSON.stringify({
-      runtime: 'nodejs20.x',
+      // nodejs20.x is discontinued on Vercel; stay on 22.x (not 24) for stable CJS helpers.
+      runtime: 'nodejs22.x',
       handler: 'index.js',
       launcherType: 'Nodejs',
       shouldAddHelpers: true,
