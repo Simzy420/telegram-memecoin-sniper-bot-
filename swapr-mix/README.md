@@ -19,7 +19,7 @@ Swapr Mix:
 2. You tap **green** on the person to replace.
 3. You tap **red** on props to keep.
 4. Generate sends `points_store` / `coordinates` / `neg_coordinates` so Runpod loads `newWanAnimate_point_api.json` (SAM guided by your marks).
-5. Slightly stronger Mix defaults (steps 10, cfg 2, prop-aware prompt/negative).
+5. Slightly stronger Mix defaults (steps 5, cfg 1, prop-aware prompt, standard Wan negative).
 
 Same Runpod endpoint and template catalog as Swapr. Same phone proxy pattern (`USE_PROXY: true`).
 

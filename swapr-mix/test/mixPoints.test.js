@@ -58,6 +58,6 @@ describe("mixPoints", () => {
 
   it("exports Mix prompt defaults that mention props", () => {
     assert.match(MIX_DEFAULT_PROMPT, /handheld object|prop/i);
-    assert.match(MIX_DEFAULT_NEGATIVE, /missing prop|rubber|plastic/i);
+    assert.match(MIX_DEFAULT_NEGATIVE, /最差质量|畸形的/);
   });
 });

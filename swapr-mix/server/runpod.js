@@ -30,8 +30,8 @@ const RUNPOD_DEFAULTS = {
   width: 480,
   height: 832,
   fps: 16,
-  cfg: 2,
-  steps: 10,
+  cfg: 1,
+  steps: 5,
   mode: "replace",
 };
 
