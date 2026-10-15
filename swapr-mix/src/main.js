@@ -6,8 +6,12 @@
  * /api/generate when USE_PROXY is true (required on iPhone), and always
  * includes SAM positive/negative points for the Runpod point workflow.
  */
+import { inject } from '@vercel/analytics';
 import { generateFailureText, publicErrorText } from "../server/gatewayError.js";
 import { rewriteSpaceVideoUrl } from "../server/videoUrl.js";
+
+// Initialize Vercel Analytics
+inject();
 
 const cfg = window.CONFIG || {};
 const SPACE = import.meta.env.VITE_HF_SPACE || cfg.HF_SPACE || "https://simzy-wan-2-2-templates.hf.space";
