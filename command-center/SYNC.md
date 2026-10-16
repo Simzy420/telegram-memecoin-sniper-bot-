@@ -31,3 +31,19 @@ Before any production alias change:
    - `POST /api/drive/session` with `{}` → `401` `needsPassword` (not 500)
 3. Prefer a **prebuilt** `.vercel/output` upload over a raw git build when unsure.
 4. Never leave production on a deploy whose `/api/accounts` returns 500.
+
+## 2026-10-16 production restore
+
+Upstream `Simzy420/command-center` main auto-deployed "Trading cycle Oct 16: compute balance update" (`dpl_En2qfe3KNWxPgYkt7ExZm4nRKdkh`) and broke Sign-in again.
+
+Runtime logs:
+
+```
+Error [ERR_MODULE_NOT_FOUND]: Cannot find module '/var/task/api/_lib/accounts.ts' imported from /var/task/api/accounts.js
+```
+
+Same class of bug as 2026-10-15: Vercel served the unbundled `api/` tree instead of the Build Output bundles.
+
+Restore: re-aliased `command-center-neon-iota.vercel.app` to the known-good login-fix deploy `dpl_4PtaGng2UMAwCtyFJ6RvjpKRuEyU` (from this mirror's `serverless-src/` + CJS attach).
+
+Vercel project ignore-build command skips any git deploy that still has `api/` without `serverless-src/`, so compute-balance-only upstream pushes cannot take production offline again until the upstream repo lands the same layout fix.
