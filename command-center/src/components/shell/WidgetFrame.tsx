@@ -19,6 +19,7 @@ const ACCENT: Record<string, string> = {
   game: 'accent-mag',
   drive: 'accent-cyan',
   trading: 'accent-gold',
+  'agent-relay': 'accent-mag',
 };
 
 interface Props {

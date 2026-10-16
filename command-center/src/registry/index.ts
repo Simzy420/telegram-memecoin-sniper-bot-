@@ -12,6 +12,7 @@ import { TradingStubWidget } from '@/components/widgets/PlaceholderWidgets';
 import { GmailWidget } from '@/components/widgets/GmailWidget';
 import { GameWidget, GAME_TITLE, GAME_TITLE_STYLE } from '@/components/widgets/GameWidget';
 import { DriveWidget } from '@/components/widgets/DriveWidget';
+import { AgentRelayWidget } from '@/components/widgets/AgentRelayWidget';
 import { GMAIL_TITLE_STYLE } from '@/adapters/gmail/policy';
 import { DRIVE_TITLE_STYLE } from '@/adapters/drive/policy';
 import type { FeatureFlags } from '@/store/sessionStore';
@@ -119,6 +120,17 @@ registerWidget({
   defaultSize: { w: 6, h: 6 },
   minSize: { w: 3, h: 4 },
   component: ComputeWidget,
+});
+
+registerWidget({
+  type: 'agent-relay',
+  title: 'Agent Relay',
+  description:
+    'Build with AI tools, add URLs, and switch agents when free credits run out — handoff brief keeps context.',
+  icon: 'message',
+  defaultSize: { w: 12, h: 14 },
+  minSize: { w: 4, h: 8 },
+  component: AgentRelayWidget,
 });
 
 registerWidget({

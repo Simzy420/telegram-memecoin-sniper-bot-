@@ -14,7 +14,8 @@ export type WidgetType =
   | 'game'
   | 'drive'
   | 'trading'
-  | 'compute';
+  | 'compute'
+  | 'agent-relay';
 
 export interface WidgetInstance {
   id: string;

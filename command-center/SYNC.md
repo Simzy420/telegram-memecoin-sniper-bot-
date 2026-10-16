@@ -48,6 +48,10 @@ Restore: re-aliased `command-center-neon-iota.vercel.app` to the known-good logi
 
 Vercel project ignore-build command skips any git deploy that still has `api/` without `serverless-src/`, so compute-balance-only upstream pushes cannot take production offline again until the upstream repo lands the same layout fix.
 
+## Agent Relay
+
+Phone-first widget `agent-relay` keeps a project handoff brief and a roster of AI tools/agents (seeded from the AI Tools menu, plus custom URLs). Switching tools copies the brief to the clipboard and opens the tool so the next agent can paste context instead of restarting. AI Tools menu items route through the same relay.
+
 ## 2026-10-16 auth store restore
 
 After the function crash was fixed, `/api/accounts` still could not complete Sign-in/Sign-up because the tree had switched to Supabase Auth without `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` on the Vercel project. Wrong-password and signup both returned generic 401s.

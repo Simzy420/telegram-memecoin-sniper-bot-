@@ -1,9 +1,15 @@
-import type { ComponentType } from 'react';
+import type { ComponentType, MouseEvent } from 'react';
 import { ChevronLeft, X } from 'lucide-react';
+import { openToolWithHandoff } from '@/adapters/agentRelay/openTool';
+import { AI_TOOL_LINKS } from '@/components/shell/aiToolsData';
+import { getWidget } from '@/registry';
+import { useAgentRelayStore } from '@/store/agentRelayStore';
+import { useProfileStore } from '@/store/profileStore';
+import { useSessionStore } from '@/store/sessionStore';
 
 export const AI_TOOLS_LABEL = 'AI Tools';
 
-type AiTool = {
+export type AiTool = {
   name: string;
   href: string;
   Icon: ComponentType;
@@ -101,16 +107,21 @@ function LinkIcon() {
   );
 }
 
-export const AI_TOOLS: readonly AiTool[] = [
-  { name: 'ChatGPT', href: 'https://chatgpt.com', Icon: ChatGptIcon },
-  { name: 'Base44', href: 'https://base44.com', Icon: Base44Icon },
-  { name: 'Cursor', href: 'https://cursor.com', Icon: CursorIcon },
-  { name: 'Buffer', href: 'https://buffer.com', Icon: BufferIcon },
-  { name: 'Linear', href: 'https://linear.app', Icon: LinearIcon },
-  { name: 'Replit', href: 'https://replit.com', Icon: ReplitIcon },
-  { name: 'Perplexity', href: 'https://www.perplexity.ai', Icon: PerplexityIcon },
-  { name: 'Link', href: 'https://apps.apple.com/app/id1623228342', Icon: LinkIcon },
-];
+const ICONS: Record<string, ComponentType> = {
+  ChatGPT: ChatGptIcon,
+  Base44: Base44Icon,
+  Cursor: CursorIcon,
+  Buffer: BufferIcon,
+  Linear: LinearIcon,
+  Replit: ReplitIcon,
+  Perplexity: PerplexityIcon,
+  Link: LinkIcon,
+};
+
+export const AI_TOOLS: readonly AiTool[] = AI_TOOL_LINKS.map((tool) => ({
+  ...tool,
+  Icon: ICONS[tool.name] ?? LinkIcon,
+}));
 
 const plainLabel = { textTransform: 'none' as const };
 
@@ -141,12 +152,57 @@ export function AiToolsPanel({ onBack, onClose }: { onBack: () => void; onClose:
           <X className="h-5 w-5" />
         </button>
       </div>
-      <AiToolsList />
+      <p className="mb-3 text-xs leading-relaxed text-white/50">
+        Opens for your Agent Relay project and copies the handoff brief so the next tool already knows where you left off.
+      </p>
+      <AiToolsList onOpened={onClose} />
     </>
   );
 }
 
-export function AiToolsList() {
+function ensureAgentRelayOnBoard() {
+  const { activeId, layout, addWidget } = useProfileStore.getState();
+  if (!activeId || !layout) return;
+  if (layout.widgets.some((widget) => widget.type === 'agent-relay')) return;
+  const def = getWidget('agent-relay');
+  if (!def) return;
+  try {
+    addWidget('bots', 'agent-relay', {
+      w: def.defaultSize.w,
+      h: def.defaultSize.h,
+      settings: def.defaultSettings,
+    });
+  } catch {
+    /* guest / locked board */
+  }
+}
+
+export function AiToolsList({ onOpened }: { onOpened?: () => void } = {} as { onOpened?: () => void }) {
+  const openMenuTool = useAgentRelayStore((s) => s.openMenuTool);
+  const markCopied = useAgentRelayStore((s) => s.markCopied);
+  const setDrawerOpen = useSessionStore((s) => s.setDrawerOpen);
+  const setBoard = useSessionStore((s) => s.setBoard);
+
+  async function openViaRelay(event: MouseEvent<HTMLAnchorElement>, tool: AiTool) {
+    event.preventDefault();
+    const routed = openMenuTool(tool.name, tool.href);
+    if (!routed) {
+      window.open(tool.href, '_blank', 'noopener,noreferrer');
+      onOpened?.();
+      return;
+    }
+    const result = await openToolWithHandoff({
+      url: routed.agent.url,
+      paste: routed.paste,
+      title: `${routed.project.name} · ${routed.agent.name}`,
+    });
+    if (result.copied) markCopied();
+    ensureAgentRelayOnBoard();
+    setBoard('bots');
+    setDrawerOpen(false);
+    onOpened?.();
+  }
+
   return (
     <ul className="flex flex-col gap-2">
       {AI_TOOLS.map((tool) => (
@@ -156,6 +212,9 @@ export function AiToolsList() {
             target="_blank"
             rel="noopener noreferrer"
             className="flex min-h-12 items-center gap-3 rounded-2xl border border-white/10 bg-white/5 px-3 py-2"
+            onClick={(event) => {
+              void openViaRelay(event, tool);
+            }}
           >
             <tool.Icon />
             <span className="text-sm font-medium text-white" style={plainLabel}>
