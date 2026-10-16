@@ -47,3 +47,9 @@ Same class of bug as 2026-10-15: Vercel served the unbundled `api/` tree instead
 Restore: re-aliased `command-center-neon-iota.vercel.app` to the known-good login-fix deploy `dpl_4PtaGng2UMAwCtyFJ6RvjpKRuEyU` (from this mirror's `serverless-src/` + CJS attach).
 
 Vercel project ignore-build command skips any git deploy that still has `api/` without `serverless-src/`, so compute-balance-only upstream pushes cannot take production offline again until the upstream repo lands the same layout fix.
+
+## 2026-10-16 auth store restore
+
+After the function crash was fixed, `/api/accounts` still could not complete Sign-in/Sign-up because the tree had switched to Supabase Auth without `SUPABASE_PUBLISHABLE_KEY` / `SUPABASE_SECRET_KEY` on the Vercel project. Wrong-password and signup both returned generic 401s.
+
+Restored the last Blob/scrypt accounts handler (`accounts/v1.json` via `BLOB_READ_WRITE_TOKEN`) and the Username field label. Existing Blob profiles remain the source of truth.

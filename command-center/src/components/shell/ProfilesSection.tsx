@@ -63,7 +63,7 @@ export function ProfilesSection() {
             className="hud-input w-full"
             value={name}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Email"
+            placeholder="Username"
             autoComplete="username"
             aria-label="Username"
           />

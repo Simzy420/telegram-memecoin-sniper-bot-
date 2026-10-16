@@ -1,16 +1,9 @@
-import { DEFAULT_BOARDS, type LayoutDocument } from '../../src/types/layout.ts';
-
-export const ACCOUNTS_UNAVAILABLE =
-  "Sign-in is available on the Vercel site. This page stays on Casey's board.";
-
-export interface AccountSession {
-  username: string;
-  layout: LayoutDocument | null;
-}
-
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://inlqueorerrsmfnaryzj.supabase.co';
-const SUPABASE_ANON_KEY = process.env.SUPABASE_PUBLISHABLE_KEY || '';
-const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY || '';
+import { createHash, randomBytes, scrypt, timingSafeEqual } from 'node:crypto';
+import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import path from 'node:path';
+import { promisify } from 'node:util';
+import { get, put } from '@vercel/blob';
+import { DEFAULT_BOARDS, type BoardId, type LayoutDocument, type WidgetInstance } from '../../src/types/layout.ts';
 
 type HeaderValue = string | string[] | undefined;
 
@@ -30,8 +23,119 @@ interface AccountResponse {
   end(body?: string): void;
 }
 
+const scryptAsync = promisify(scrypt);
 const COOKIE_NAME = 'cc_account';
 const MAX_AGE_SECONDS = 60 * 60 * 24 * 14;
+const BLOB_PATH = 'accounts/v1.json';
+const MAX_WIDGETS = 80;
+const PAGES = new Set<string>(DEFAULT_BOARDS.map((board) => board.id));
+
+export const ACCOUNTS_SETUP_MESSAGE =
+  'Connect a private Vercel Blob store to this project. Profile passwords and boards stay in that store. The server reads BLOB_READ_WRITE_TOKEN. Do not put that token in a VITE_ variable, GitHub Pages, or the app.';
+
+interface SessionRow {
+  hash: string;
+  exp: number;
+}
+
+interface AccountRecord {
+  username: string;
+  salt: string;
+  hash: string;
+  sessions: SessionRow[];
+  layout: LayoutDocument;
+}
+
+interface AccountDb {
+  users: AccountRecord[];
+}
+
+export class AccountsInputError extends Error {}
+
+function emptyDb(): AccountDb {
+  return { users: [] };
+}
+
+function emptyLayout(now = Date.now()): LayoutDocument {
+  return { version: 1, boards: DEFAULT_BOARDS, widgets: [], updatedAt: now };
+}
+
+function storeKind(): 'blob' | 'file' | 'unset' {
+  if (process.env.BLOB_READ_WRITE_TOKEN) return 'blob';
+  if (process.env.VERCEL && !process.env.ACCOUNTS_FILE) return 'unset';
+  return 'file';
+}
+
+function accountsFile(): string {
+  return process.env.ACCOUNTS_FILE || path.join(process.cwd(), '.data', 'accounts.json');
+}
+
+function readFileDb(): AccountDb {
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(accountsFile(), 'utf8'));
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as AccountDb).users)) return emptyDb();
+    return parsed as AccountDb;
+  } catch {
+    return emptyDb();
+  }
+}
+
+function writeFileDb(db: AccountDb): void {
+  const file = accountsFile();
+  mkdirSync(path.dirname(file), { recursive: true });
+  const temp = `${file}.${process.pid}.tmp`;
+  writeFileSync(temp, JSON.stringify(db));
+  renameSync(temp, file);
+}
+
+async function readBlobText(): Promise<string | null> {
+  const loaded = await get(BLOB_PATH, { access: 'private', useCache: false });
+  if (!loaded || loaded.stream == null) return null;
+  return new Response(loaded.stream).text();
+}
+
+async function readDb(): Promise<AccountDb> {
+  const kind = storeKind();
+  if (kind === 'unset') throw new AccountsInputError(ACCOUNTS_SETUP_MESSAGE);
+  if (kind === 'file') return readFileDb();
+  try {
+    const text = await readBlobText();
+    if (!text) return emptyDb();
+    const parsed: unknown = JSON.parse(text);
+    if (!parsed || typeof parsed !== 'object' || !Array.isArray((parsed as AccountDb).users)) return emptyDb();
+    return parsed as AccountDb;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : '';
+    if (/not found|404/i.test(message)) return emptyDb();
+    throw err;
+  }
+}
+
+async function writeDb(db: AccountDb): Promise<void> {
+  const kind = storeKind();
+  if (kind === 'unset') throw new AccountsInputError(ACCOUNTS_SETUP_MESSAGE);
+  if (kind === 'file') {
+    writeFileDb(db);
+    return;
+  }
+  await put(BLOB_PATH, JSON.stringify(db), {
+    access: 'private',
+    addRandomSuffix: false,
+    allowOverwrite: true,
+    contentType: 'application/json',
+  });
+}
+
+let chain: Promise<unknown> = Promise.resolve();
+
+function withLock<T>(fn: () => Promise<T>): Promise<T> {
+  const run = chain.then(fn, fn);
+  chain = run.then(
+    () => undefined,
+    () => undefined,
+  );
+  return run;
+}
 
 function header(req: AccountRequest, name: string): string {
   const value = req.headers[name] ?? req.headers[name.toLowerCase()];
@@ -41,6 +145,11 @@ function header(req: AccountRequest, name: string): string {
 
 function hostName(req: AccountRequest): string {
   return header(req, 'host') || 'localhost';
+}
+
+function clientIp(req: AccountRequest): string {
+  const forwarded = header(req, 'x-forwarded-for').split(',')[0]?.trim();
+  return forwarded || req.socket?.remoteAddress || 'local';
 }
 
 function readCookie(headerValue: string): string {
@@ -79,7 +188,7 @@ function send(res: AccountResponse, code: number, payload: Record<string, unknow
 
 async function readBody(req: AccountRequest): Promise<unknown> {
   if (typeof req.body === 'string') {
-    if (req.body.length > 200_000) throw new Error('Request is too large.');
+    if (req.body.length > 200_000) throw new AccountsInputError('Request is too large.');
     return req.body ? JSON.parse(req.body) : {};
   }
   if (req.body && typeof req.body === 'object') return req.body;
@@ -90,7 +199,7 @@ async function readBody(req: AccountRequest): Promise<unknown> {
   for await (const chunk of stream) {
     const buf = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
     size += buf.length;
-    if (size > 200_000) throw new Error('Request is too large.');
+    if (size > 200_000) throw new AccountsInputError('Request is too large.');
     chunks.push(buf);
   }
   if (!chunks.length) return {};
@@ -98,186 +207,242 @@ async function readBody(req: AccountRequest): Promise<unknown> {
 }
 
 function asRecord(value: unknown): Record<string, unknown> {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Send a JSON object.');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AccountsInputError('Send a JSON object.');
   return value as Record<string, unknown>;
 }
 
-// --- Supabase Auth helpers ---
+async function hashSecret(secret: string, salt: Buffer): Promise<Buffer> {
+  return (await scryptAsync(secret, salt, 32)) as Buffer;
+}
 
-async function supabaseSignUp(email: string, password: string): Promise<{ access_token?: string; user?: { id: string; email: string }; error?: string }> {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_ANON_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email, password }),
+async function passwordHash(password: string, salt: Buffer): Promise<string> {
+  return (await hashSecret(password, salt)).toString('hex');
+}
+
+function hashesEqual(leftHex: string, right: Buffer): boolean {
+  const left = Buffer.from(leftHex, 'hex');
+  if (left.length !== right.length) return false;
+  return timingSafeEqual(left, right);
+}
+
+function tokenHash(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+function publicUser(account: AccountRecord, layout: LayoutDocument) {
+  return { ok: true, user: { username: account.username }, layout };
+}
+
+function liveSessions(account: AccountRecord, nowSec: number): SessionRow[] {
+  return account.sessions.filter((session) => session.exp > nowSec);
+}
+
+function findSession(db: AccountDb, token: string, nowSec: number): AccountRecord | undefined {
+  if (!token) return undefined;
+  const hash = tokenHash(token);
+  return db.users.find((user) => liveSessions(user, nowSec).some((session) => session.hash === hash));
+}
+
+function sanitizeLayout(value: unknown): LayoutDocument {
+  const record = asRecord(value);
+  if (record.version !== 1 || !Array.isArray(record.widgets)) throw new AccountsInputError('Invalid layout JSON.');
+  if (record.widgets.length > MAX_WIDGETS) throw new AccountsInputError('That board has too many widgets.');
+  const widgets: WidgetInstance[] = record.widgets.map((item) => {
+    const widget = asRecord(item);
+    const type = typeof widget.type === 'string' ? widget.type.slice(0, 40) : '';
+    const page = typeof widget.page === 'string' && PAGES.has(widget.page) ? (widget.page as BoardId) : 'home';
+    const num = (field: string, fallback: number, max: number) => {
+      const raw = widget[field];
+      const value = typeof raw === 'number' && Number.isFinite(raw) ? Math.round(raw) : fallback;
+      return Math.min(max, Math.max(0, value));
+    };
+    const settings: Record<string, unknown> = {};
+    const rawSettings = widget.settings;
+    if (rawSettings && typeof rawSettings === 'object' && !Array.isArray(rawSettings)) {
+      for (const [key, item] of Object.entries(rawSettings)) {
+        if (key.toLowerCase() === 'password') continue;
+        if (typeof item === 'string' || typeof item === 'number' || typeof item === 'boolean' || item == null) settings[key] = item;
+        else if (Array.isArray(item) && item.every((entry) => typeof entry === 'string')) settings[key] = item.slice(0, 40);
+      }
+    }
+    return {
+      id: typeof widget.id === 'string' && widget.id.trim() ? widget.id.slice(0, 80) : `w_${randomBytes(4).toString('hex')}`,
+      type: type || 'unknown',
+      x: num('x', 0, 48),
+      y: num('y', 0, 400),
+      w: Math.max(1, num('w', 6, 12)),
+      h: Math.max(1, num('h', 6, 40)),
+      page,
+      settings,
+    };
   });
-  const data = await res.json() as Record<string, unknown>;
-  if (!res.ok) {
-    return { error: (data.error_code as string) || (data.msg as string) || 'Sign-up failed.' };
+  return { version: 1, boards: DEFAULT_BOARDS, widgets, updatedAt: Date.now() };
+}
+
+function usernameOf(value: unknown): string {
+  if (typeof value !== 'string') throw new AccountsInputError('Enter a username.');
+  const username = value.trim();
+  if (!username || username.length > 40) throw new AccountsInputError('Enter a username.');
+  if (/[\u0000-\u001f]/.test(username)) throw new AccountsInputError('Enter a username.');
+  return username;
+}
+
+function passwordOf(value: unknown): string {
+  if (typeof value !== 'string' || value.length < 8 || value.length > 200) {
+    throw new AccountsInputError('Use at least 8 characters.');
   }
-  return {
-    access_token: data.access_token as string,
-    user: { id: data.id as string, email: data.email as string },
-  };
+  return value;
 }
 
-async function supabaseSignIn(email: string, password: string): Promise<{ access_token?: string; user?: { id: string; email: string }; error?: string }> {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_ANON_KEY,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({ email, password }),
-  });
-  const data = await res.json() as Record<string, unknown>;
-  if (!res.ok) {
-    return { error: (data.error_code as string) || (data.msg as string) || 'Invalid login credentials.' };
-  }
-  return {
-    access_token: data.access_token as string,
-    user: { id: (data.user as Record<string, unknown>)?.id as string, email: (data.user as Record<string, unknown>)?.email as string },
-  };
+const failures = new Map<string, number[]>();
+
+function attemptBlocked(ip: string, nowMs: number): boolean {
+  const recent = (failures.get(ip) ?? []).filter((time) => nowMs - time < 60_000);
+  failures.set(ip, recent);
+  return recent.length >= 8;
 }
 
-async function supabaseGetUser(token: string): Promise<{ id?: string; email?: string } | null> {
-  if (!token) return null;
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, {
-    headers: {
-      'apikey': SUPABASE_ANON_KEY,
-      'Authorization': `Bearer ${token}`,
-    },
-  });
-  if (!res.ok) return null;
-  const data = await res.json() as Record<string, unknown>;
-  return { id: data.id as string, email: data.email as string };
+function recordFailure(ip: string, nowMs: number): void {
+  const recent = failures.get(ip) ?? [];
+  recent.push(nowMs);
+  failures.set(ip, recent);
 }
 
-// --- Layout storage via Supabase (using user_metadata or a simple table) ---
-
-async function getUserLayout(userId: string): Promise<LayoutDocument | null> {
-  // Use Supabase REST API to read from the portfolio table
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/portfolio?user_id=eq.${userId}&select=data`, {
-    headers: {
-      'apikey': SUPABASE_SECRET_KEY,
-      'Authorization': `Bearer ${SUPABASE_SECRET_KEY}`,
-    },
-  });
-  if (!res.ok) return null;
-  const rows = await res.json() as Array<{ data: LayoutDocument }>;
-  if (!rows.length) return null;
-  return rows[0].data;
+export function resetAccountAttempts(): void {
+  failures.clear();
 }
 
-async function saveUserLayout(userId: string, layout: LayoutDocument): Promise<void> {
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/portfolio`, {
-    method: 'POST',
-    headers: {
-      'apikey': SUPABASE_SECRET_KEY,
-      'Authorization': `Bearer ${SUPABASE_SECRET_KEY}`,
-      'Content-Type': 'application/json',
-      'Prefer': 'resolution=merge-duplicates',
-    },
-    body: JSON.stringify({ user_id: userId, data: layout }),
-  });
-  if (!res.ok) throw new Error('Could not save board layout.');
+let dummyHash: Buffer | null = null;
+
+async function spendHashTime(password: string): Promise<void> {
+  const salt = Buffer.alloc(16, 7);
+  const hash = (await hashSecret(password, salt)) as Buffer;
+  if (!dummyHash) dummyHash = hash;
+  hashesEqual(dummyHash.toString('hex'), hash);
 }
 
-function emptyLayout(now = Date.now()): LayoutDocument {
-  return { version: 1, boards: DEFAULT_BOARDS.map((board) => ({ ...board })), widgets: [], updatedAt: now };
+async function issueSession(account: AccountRecord, host: string, nowMs: number): Promise<string> {
+  const token = randomBytes(32).toString('hex');
+  const exp = Math.floor(nowMs / 1000) + MAX_AGE_SECONDS;
+  const sessions = liveSessions(account, Math.floor(nowMs / 1000));
+  sessions.push({ hash: tokenHash(token), exp });
+  account.sessions = sessions.slice(-4);
+  return sessionCookie(token, host, MAX_AGE_SECONDS);
 }
 
-export async function handleAccountsRequest(req: AccountRequest, res: AccountResponse, _nowMs = Date.now()): Promise<void> {
+export async function handleAccountsRequest(req: AccountRequest, res: AccountResponse, nowMs = Date.now()): Promise<void> {
   try {
     if (req.method === 'OPTIONS') {
       send(res, 403, { ok: false, error: 'Accounts stay on this site.' });
       return;
     }
-
-    // GET: check if user is logged in via cookie
     if (req.method === 'GET') {
-      const token = readCookie(header(req, 'cookie'));
-      const user = await supabaseGetUser(token);
-      if (!user || !user.email) {
+      const db = await readDb();
+      const account = findSession(db, readCookie(header(req, 'cookie')), Math.floor(nowMs / 1000));
+      if (!account) {
         send(res, 200, { ok: true, user: null, layout: null });
         return;
       }
-      const layout = await getUserLayout(user.id!);
-      send(res, 200, { ok: true, user: { username: user.email }, layout: layout ?? emptyLayout() });
+      send(res, 200, publicUser(account, account.layout));
       return;
     }
-
     if (req.method !== 'POST') {
       send(res, 405, { ok: false, error: 'Method not allowed.' });
       return;
     }
-
     const data = asRecord(await readBody(req));
     const action = data.action;
-
-    // LOGOUT
     if (action === 'logout') {
+      await withLock(async () => {
+        const db = await readDb();
+        const token = readCookie(header(req, 'cookie'));
+        const hash = token ? tokenHash(token) : '';
+        for (const user of db.users) user.sessions = user.sessions.filter((session) => session.hash !== hash);
+        await writeDb(db);
+      });
       send(res, 200, { ok: true, user: null, layout: null }, sessionCookie('', hostName(req), 0));
       return;
     }
-
-    // SAVE layout
     if (action === 'save') {
-      const token = readCookie(header(req, 'cookie'));
-      const user = await supabaseGetUser(token);
-      if (!user || !user.id) {
+      const layout = sanitizeLayout(data.layout);
+      const saved = await withLock(async () => {
+        const db = await readDb();
+        const account = findSession(db, readCookie(header(req, 'cookie')), Math.floor(nowMs / 1000));
+        if (!account) return null;
+        account.layout = layout;
+        await writeDb(db);
+        return account;
+      });
+      if (!saved) {
         send(res, 401, { ok: false, error: 'Sign in to save this board.' });
         return;
       }
-      const layout = data.layout as LayoutDocument;
-      if (!layout || layout.version !== 1 || !Array.isArray(layout.widgets)) {
-        send(res, 400, { ok: false, error: 'Invalid layout.' });
-        return;
-      }
-      await saveUserLayout(user.id, layout);
-      send(res, 200, { ok: true, user: { username: user.email }, layout });
+      send(res, 200, publicUser(saved, saved.layout));
       return;
     }
-
-    // REGISTER or LOGIN
     if (action !== 'register' && action !== 'login') {
       send(res, 400, { ok: false, error: 'Unknown account action.' });
       return;
     }
-
-    const email = typeof data.username === 'string' ? data.username.trim().toLowerCase() : '';
-    const password = typeof data.password === 'string' ? data.password : '';
-
-    if (!email || !email.includes('@') || email.length > 200) {
-      send(res, 400, { ok: false, error: 'Enter a valid email address.' });
+    const username = usernameOf(data.username);
+    const password = passwordOf(data.password);
+    const ip = clientIp(req);
+    if (attemptBlocked(ip, nowMs)) {
+      send(res, 429, { ok: false, error: 'Too many sign-in attempts. Wait a moment.' });
       return;
     }
-    if (password.length < 8) {
-      send(res, 400, { ok: false, error: 'Use at least 8 characters.' });
+    const result = await withLock(async () => {
+      const db = await readDb();
+      const existing = db.users.find((user) => user.username.toLowerCase() === username.toLowerCase());
+      if (action === 'register') {
+        if (existing) return { status: 409 as const, error: 'That username is already in use.' };
+        const salt = randomBytes(16);
+        const account: AccountRecord = {
+          username,
+          salt: salt.toString('hex'),
+          hash: await passwordHash(password, salt),
+          sessions: [],
+          layout: emptyLayout(nowMs),
+        };
+        const cookie = await issueSession(account, hostName(req), nowMs);
+        db.users.push(account);
+        await writeDb(db);
+        return { status: 200 as const, account, cookie };
+      }
+      if (!existing) {
+        await spendHashTime(password);
+        recordFailure(ip, nowMs);
+        return { status: 401 as const, error: 'Wrong username or password.' };
+      }
+      const actual = await hashSecret(password, Buffer.from(existing.salt, 'hex'));
+      if (!hashesEqual(existing.hash, actual)) {
+        recordFailure(ip, nowMs);
+        return { status: 401 as const, error: 'Wrong username or password.' };
+      }
+      const cookie = await issueSession(existing, hostName(req), nowMs);
+      await writeDb(db);
+      return { status: 200 as const, account: existing, cookie };
+    });
+    if (result.status !== 200) {
+      send(res, result.status, { ok: false, error: result.error });
       return;
     }
-
-    const result = action === 'register'
-      ? await supabaseSignUp(email, password)
-      : await supabaseSignIn(email, password);
-
-    if (result.error || !result.access_token || !result.user) {
-      const msg = result.error === 'invalid_credentials' ? 'Wrong email or password.' : (result.error || 'Authentication failed.');
-      send(res, 401, { ok: false, error: msg });
+    const body = JSON.stringify(publicUser(result.account, result.account.layout));
+    if (body.includes(password)) {
+      send(res, 500, { ok: false, error: 'Account response failed.' });
       return;
     }
-
-    const layout = await getUserLayout(result.user.id);
-    send(
-      res,
-      200,
-      { ok: true, user: { username: result.user.email }, layout: layout ?? emptyLayout() },
-      sessionCookie(result.access_token, hostName(req), MAX_AGE_SECONDS),
-    );
+    send(res, 200, publicUser(result.account, result.account.layout), result.cookie);
   } catch (err) {
-    const msg = err instanceof Error ? err.message : 'Account request failed.';
-    send(res, 500, { ok: false, error: msg });
+    if (err instanceof AccountsInputError) {
+      const code = err.message === ACCOUNTS_SETUP_MESSAGE ? 503 : 400;
+      send(res, code, { ok: false, error: err.message });
+      return;
+    }
+    if (err instanceof SyntaxError) {
+      send(res, 400, { ok: false, error: 'Send a JSON object.' });
+      return;
+    }
+    send(res, 500, { ok: false, error: 'Account request failed.' });
   }
 }
