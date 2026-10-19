@@ -14,33 +14,43 @@ interface ComputeData {
 type Phase = 'loading' | 'live' | 'err';
 type RefreshLight = 'idle' | 'ok' | 'fail';
 
+/** The daily trading cron commits the balance here. Reading it from GitHub
+ *  means refresh gets the newest number on both GitHub Pages and Vercel,
+ *  without waiting for a redeploy of either site. */
+const LATEST_BALANCE_URL =
+  'https://raw.githubusercontent.com/Simzy420/command-center/main/public/compute-balance.json';
+
+function isComputeData(json: unknown): json is ComputeData {
+  return !!json && typeof (json as ComputeData).remaining === 'number';
+}
+
+async function fetchJson(url: string): Promise<unknown> {
+  const res = await fetch(url, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
 /**
- * Fetches the agent's Virtuals compute balance from the API endpoint.
- * The endpoint runs `acp compute status` server-side and returns JSON.
- * Falls back to the static JSON file in the dashboard repo (updated by cron).
+ * Fetches the agent's Virtuals compute balance.
+ * First the latest copy in the repo (updated by the cron job), then the copy
+ * bundled with this deploy if GitHub can't be reached.
  */
 async function fetchCompute(): Promise<ComputeData> {
-  // Try the Vercel API endpoint first (live data)
   try {
-    const res = await fetch('/api/compute-status?t=' + Date.now());
-    if (res.ok) {
-      const json = await res.json();
-      if (json && typeof json.remaining === 'number') {
-        return json;
-      }
-    }
+    const json = await fetchJson(LATEST_BALANCE_URL + '?t=' + Date.now());
+    if (isComputeData(json)) return json;
   } catch {
-    // fall through to static file
+    // fall through to the bundled file
   }
 
-  // Fallback: static JSON file updated by the trading cron job
   const base = import.meta.env.BASE_URL || '/';
-  const res2 = await fetch(base + 'compute-balance.json?t=' + Date.now());
-  if (!res2.ok) throw new Error('Could not reach compute status endpoint.');
-  const data = await res2.json();
-  if (!data || typeof data.remaining !== 'number') {
-    throw new Error('Invalid compute balance data.');
+  let data: unknown;
+  try {
+    data = await fetchJson(base + 'compute-balance.json?t=' + Date.now());
+  } catch {
+    throw new Error('Could not reach compute balance.');
   }
+  if (!isComputeData(data)) throw new Error('Invalid compute balance data.');
   return data;
 }
 
