@@ -54,6 +54,15 @@ async function fetchCompute(): Promise<ComputeData> {
   return data;
 }
 
+interface RunpodData { balance: number; spendPerHr: number; hoursLeft: number | null; updated: string; }
+const RUNPOD_URL = 'https://raw.githubusercontent.com/Simzy420/command-center/main/public/runpod-balance.json';
+async function fetchRunpod(): Promise<RunpodData | null> {
+  try {
+    const j = (await fetchJson(RUNPOD_URL + '?t=' + Date.now())) as RunpodData;
+    return typeof j?.balance === 'number' ? j : null;
+  } catch { return null; }
+}
+
 function formatUsd(value: number): string {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -69,10 +78,12 @@ export function ComputeWidget({ widget }: WidgetRenderProps) {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [light, setLight] = useState<RefreshLight>('idle');
+  const [rp, setRp] = useState<RunpodData | null>(null);
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
     setError(null);
+    void fetchRunpod().then(setRp);
     try {
       const d = await fetchCompute();
       setData(d);
@@ -187,6 +198,31 @@ export function ComputeWidget({ widget }: WidgetRenderProps) {
             ) : null}
           </>
         )}
+
+        {/* RunPod balance */}
+        <div className="space-y-2 border-t border-white/10 pt-3">
+          <div className="flex items-center gap-2">
+            <Zap className="h-4 w-4 text-violet-300" />
+            <span className="text-xs uppercase tracking-widest text-white/55">RunPod Balance</span>
+          </div>
+          {rp ? (
+            <>
+              <div className="flex items-baseline justify-between">
+                <span className="text-xs text-white/45">Credit</span>
+                <span className="font-mono text-2xl font-bold tabular-nums" style={{ color: rp.balance > 10 ? '#3fb950' : rp.balance > 3 ? '#d29922' : '#f85149' }}>
+                  {formatUsd(rp.balance)}
+                </span>
+              </div>
+              <div className="flex justify-between text-xs text-white/45">
+                <span>Spend: {formatUsd(rp.spendPerHr)}/hr</span>
+                <span>{rp.hoursLeft != null ? `~${rp.hoursLeft} hrs left` : 'Idle'}</span>
+              </div>
+              <p className="text-right font-mono text-[10px] uppercase tracking-widest text-white/30">Updated: {rp.updated}</p>
+            </>
+          ) : (
+            <p className="text-xs text-white/40">RunPod balance unavailable — tap refresh.</p>
+          )}
+        </div>
       </div>
     </WidgetFrame>
   );
