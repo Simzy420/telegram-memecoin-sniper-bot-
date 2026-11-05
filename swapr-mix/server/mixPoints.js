@@ -81,24 +81,54 @@ export const MIX_DEFAULT_PROMPT =
 export const MIX_PROP_PROMPT =
   "replace the marked person with the person in the reference photo, and replace the marked handheld prop with the object in the corner of the reference photo, natural motion, cinematic";
 
+/** Several green marks. Faces in the reference photo run left to right in tap order. */
+export const MIX_MULTI_PROMPT =
+  "replace each marked person with the matching face in the reference photo, left to right in the same order as the green marks, natural motion, cinematic";
+
+export const MIX_MULTI_PROP_PROMPT =
+  "replace each marked person with the matching face in the reference photo, left to right in the same order as the green marks, and replace each marked handheld prop with the matching object in the corner of the reference photo, left to right, natural motion, cinematic";
+
 export const LEGACY_KEEP_PROMPTS = [
   "the person in the reference photo, replace only that person, keep every handheld object from the template unchanged and real",
   "the person in the reference photo, replace only that person, keep every handheld object prop food drink popsicle stick utensil and item from the template video unchanged and real, natural motion, cinematic",
 ];
 
-export function mixPrompt(userPrompt, hasProp) {
+export function isBareMixPrompt(userPrompt) {
   const trimmed = String(userPrompt || "").trim();
-  const bare =
+  return (
     !trimmed ||
     LEGACY_KEEP_PROMPTS.includes(trimmed) ||
     trimmed === MIX_DEFAULT_PROMPT ||
-    trimmed === MIX_PROP_PROMPT;
+    trimmed === MIX_PROP_PROMPT ||
+    trimmed === MIX_MULTI_PROMPT ||
+    trimmed === MIX_MULTI_PROP_PROMPT
+  );
+}
+
+/** Stock wording for one person, several people, and an optional prop replace. */
+export function mixStockPrompt(hasProp, personCount = 1) {
+  const multi = Number(personCount) > 1;
+  if (multi && hasProp) return MIX_MULTI_PROP_PROMPT;
+  if (multi) return MIX_MULTI_PROMPT;
+  if (hasProp) return MIX_PROP_PROMPT;
+  return MIX_DEFAULT_PROMPT;
+}
+
+export function mixPrompt(userPrompt, hasProp, personCount = 1) {
+  const trimmed = String(userPrompt || "").trim();
+  const stock = mixStockPrompt(hasProp, personCount);
+  if (isBareMixPrompt(trimmed)) return stock;
+  const multi = Number(personCount) > 1;
+  if (multi) {
+    const hasPeople = /each marked person/i.test(trimmed);
+    const hasPropLine = /marked handheld prop|object in the corner of the reference photo/i.test(trimmed);
+    if (hasPeople && (!hasProp || hasPropLine)) return trimmed;
+    return `${stock}. ${trimmed}`;
+  }
   if (hasProp) {
-    if (bare) return MIX_PROP_PROMPT;
     if (/marked handheld prop|object in the corner of the reference photo/i.test(trimmed)) return trimmed;
     return `${MIX_PROP_PROMPT}. ${trimmed}`;
   }
-  if (bare) return MIX_DEFAULT_PROMPT;
   if (/keep every handheld|props to keep|objects to keep/i.test(trimmed)) {
     return `${MIX_DEFAULT_PROMPT}. ${trimmed}`;
   }

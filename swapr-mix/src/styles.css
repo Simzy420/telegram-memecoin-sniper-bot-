@@ -237,6 +237,38 @@ body {
   display: grid;
   gap: 0.9rem;
 }
+.mark-slots {
+  display: grid;
+  gap: 0.75rem;
+}
+.mark-slot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+.mark-slot-head strong { font-size: 0.95rem; }
+.slot-empty { margin: 0.15rem 0 0; }
+.mark-slot .upload-zone,
+.mark-slot .upload-inner { min-height: 108px; }
+.mark-slot .upload-inner { padding: 1rem 0.75rem; }
+.upload-zone.has-file { min-height: 0; }
+.upload-zone.has-file .upload-inner { display: none; }
+.slot-preview {
+  display: block;
+  width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  background: #000;
+}
+.slot-replace {
+  display: block;
+  text-align: center;
+  padding: 0.4rem 0.5rem 0.65rem;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
 .upload-block h3 {
   margin: 0 0 0.2rem;
   font-size: 1rem;

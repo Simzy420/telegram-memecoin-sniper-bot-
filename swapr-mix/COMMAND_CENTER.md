@@ -16,7 +16,7 @@ export const SWAPR_MIX_APP_URL =
 ## 2. `src/components/widgets/SwaprMixPanel.tsx`
 
 Copy `SwaprPanel.tsx`, import `SWAPR_MIX_APP_URL`, retitle to **Swapr Mix**, and note:
-mark person (green) and prop (red), then upload a still for each, before Generate.
+mark each person (green) and upload that person’s face, and mark each prop (red) with its own still, before Generate.
 
 ## 3. Image model
 

@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0b0f" />
-    <title>Swapr Mix — replace a person and props</title>
+    <title>Swapr Mix — replace people and props</title>
     <link rel="stylesheet" href="/src/styles.css" />
     <script src="/config.js"></script>
   </head>
@@ -12,8 +12,8 @@
     <div id="app">
       <header class="top">
         <p class="product-badge">Swapr Mix</p>
-        <h1>Replace person &amp; props</h1>
-        <p class="sub">Pick a motion, mark who and what to replace, then upload a still for each. Original Swapr stays unchanged.</p>
+        <h1>Replace people &amp; props</h1>
+        <p class="sub">Mark each person in green and upload a face for that mark. Mark props in red when you want those replaced too.</p>
         <button type="button" id="btn-howto" class="howto-launch" aria-haspopup="dialog" aria-controls="howto-dialog">
           How Mix works
         </button>
@@ -41,9 +41,10 @@
       </section>
 
       <section class="section is-locked" id="mask-section" hidden aria-disabled="true">
-        <h2>Mark person &amp; props</h2>
+        <h2>Mark people &amp; props</h2>
         <p class="muted" id="mask-hint">
-          Green = person to replace. Red = prop to replace (popsicle, cup, phone…).
+          Green = a person to replace. Red = a prop to replace (popsicle, cup, phone).
+          Numbers on the dots match the Person and Prop slots below.
         </p>
         <div class="mask-tools" role="group" aria-label="Mark mode">
           <button type="button" id="mask-mode-person" class="mask-mode active" aria-pressed="true">Mark person</button>
@@ -51,7 +52,7 @@
           <button type="button" id="mask-clear" class="ghost">Clear marks</button>
         </div>
         <div class="mask-stage">
-          <canvas id="mask-canvas" width="360" height="640" aria-label="Tap the template frame to mark"></canvas>
+          <canvas id="mask-canvas" width="360" height="640" aria-label="Tap the template frame. Green numbers are people to replace. Red numbers are props to replace."></canvas>
         </div>
         <p id="mask-status" class="muted" aria-live="polite">No marks yet.</p>
       </section>
@@ -61,37 +62,23 @@
         <p id="upload-hint" class="muted">Pick a motion above to unlock replacement stills.</p>
         <div class="upload-pair">
           <div class="upload-block">
-            <h3 class="dot-green">Green dot · person</h3>
-            <p class="muted">Upload the face or body that should replace every person you marked in green.</p>
-            <label class="upload-zone person-zone" id="upload-zone">
-              <input type="file" id="photo-input" accept="image/*" multiple hidden disabled />
-              <div class="upload-inner" id="upload-inner">
-                <div class="upload-icon" aria-hidden="true">⬆</div>
-                <strong>Upload person replacement</strong>
-                <span class="muted">One or more stills · JPG / PNG</span>
-              </div>
-              <div id="person-previews" class="preview-row" hidden></div>
-            </label>
+            <h3 class="dot-green">Green dots · one face each</h3>
+            <p class="muted">Each green mark gets a slot. Person 1 is the first person you tap.</p>
+            <div id="person-slots" class="mark-slots" aria-live="polite"></div>
+            <p id="person-slots-empty" class="muted slot-empty">No people marked yet. Tap the frame with Mark person.</p>
           </div>
           <div class="upload-block">
-            <h3 class="dot-red">Red dot · prop</h3>
-            <p class="muted">Upload the object that should replace the prop you marked in red.</p>
-            <label class="upload-zone prop-zone" id="prop-upload-zone">
-              <input type="file" id="prop-input" accept="image/*" multiple hidden disabled />
-              <div class="upload-inner" id="prop-upload-inner">
-                <div class="upload-icon" aria-hidden="true">⬆</div>
-                <strong>Upload prop replacement</strong>
-                <span class="muted">One or more stills · popsicle, cup, phone…</span>
-              </div>
-              <div id="prop-previews" class="preview-row" hidden></div>
-            </label>
+            <h3 class="dot-red">Red dots · one prop each</h3>
+            <p class="muted">Each red mark gets a slot. Skip this if you are only replacing people.</p>
+            <div id="prop-slots" class="mark-slots" aria-live="polite"></div>
+            <p id="prop-slots-empty" class="muted slot-empty">No props marked yet.</p>
           </div>
         </div>
       </section>
 
       <section class="section">
         <h2>Prompt <span class="muted">(optional)</span></h2>
-        <textarea id="prompt" rows="3" placeholder="replace the marked person and the marked prop…">replace the marked person with the person in the reference photo, and replace the marked handheld prop with the object in the corner of the reference photo, natural motion, cinematic</textarea>
+        <textarea id="prompt" rows="3" placeholder="replace each marked person, and any marked prop…">replace the marked person with the person in the reference photo, natural motion, cinematic</textarea>
       </section>
 
       <section class="section actions">
@@ -132,7 +119,7 @@
       </section>
 
       <footer class="foot muted">
-        Swapr Mix · replace person and props · original Swapr left as-is
+        Swapr Mix · replace marked people and props · original Swapr left as-is
       </footer>
     </div>
 
@@ -146,15 +133,15 @@
       <p>
         Original <strong>Swapr</strong> (Become the Character) is unchanged.
         Mix is a separate app that sends <strong>SAM control points</strong> so you can choose
-        which person and which prop Wan Animate replaces.
+        which people and which props Wan Animate replaces.
       </p>
 
       <h3>Use Mix</h3>
       <ol>
         <li><strong>Pick a motion</strong> from the gallery.</li>
-        <li><strong>Mark person</strong> — tap green on each person to replace.</li>
-        <li><strong>Mark prop</strong> — tap red on each prop to replace (popsicle, cup, phone).</li>
-        <li><strong>Upload stills</strong> — a person image for the green dots, and a prop image for the red dots.</li>
+        <li><strong>Mark person</strong> — tap green once on each person to replace. Person 1, Person 2, and so on match the numbers on the dots.</li>
+        <li><strong>Mark prop</strong> — tap red once on each prop to replace (popsicle, cup, phone). Leave this out if you only want people replaced.</li>
+        <li><strong>Upload a face per person</strong> — fill every Person slot, and every Prop slot you marked.</li>
         <li>Tap <strong>Generate Mix</strong>. Leave the tab open while Runpod runs.</li>
       </ol>
 

@@ -122,6 +122,7 @@ describe("Runpod Wan Animate client", () => {
     assert.match(input.negative_prompt, /低质量|畸形的/);
     assert.match(input.prompt, /replace the marked person/);
     assert.match(input.prompt, /a person/);
+    assert.doesNotMatch(input.prompt, /each marked person/);
     assert.doesNotMatch(input.prompt, /keep every handheld|props to keep/i);
     assert.deepEqual(JSON.parse(input.coordinates), [{ x: 192, y: 332.8 }]);
     assert.deepEqual(JSON.parse(input.neg_coordinates), [{ x: 0, y: 0 }]);
@@ -149,6 +150,52 @@ describe("Runpod Wan Animate client", () => {
         }),
       /red-dot prop/,
     );
+  });
+
+  it("sends every green mark and pairs faces left to right", () => {
+    const input = buildRunpodInput({
+      image_base64: "abc",
+      video_url: MOTION,
+      prompt: "a person",
+      positive_points: [
+        { x: 10, y: 20 },
+        { x: 40, y: 80 },
+      ],
+    });
+    assert.equal(input.image_base64, "abc");
+    assert.equal("prop_image_base64" in input, false);
+    assert.equal(input.mode, "replace");
+    assert.deepEqual(JSON.parse(input.coordinates), [
+      { x: 10, y: 20 },
+      { x: 40, y: 80 },
+    ]);
+    assert.match(input.prompt, /each marked person/);
+    assert.match(input.prompt, /left to right/);
+    assert.match(input.prompt, /a person/);
+    assert.doesNotMatch(input.prompt, /keep every handheld|props to keep/i);
+  });
+
+  it("keeps prop replace when several people are marked", () => {
+    const input = buildRunpodInput({
+      image_base64: "abc",
+      prop_image_base64: "prop",
+      video_url: MOTION,
+      positive_points: [
+        { x: 10, y: 20 },
+        { x: 30, y: 40 },
+      ],
+      prop_points: [{ x: 70, y: 80 }],
+    });
+    assert.equal(input.prop_image_base64, "prop");
+    assert.deepEqual(JSON.parse(input.coordinates), [
+      { x: 10, y: 20 },
+      { x: 30, y: 40 },
+      { x: 70, y: 80 },
+    ]);
+    assert.match(input.prompt, /each marked person/);
+    assert.match(input.prompt, /marked handheld prop/);
+    assert.match(input.prompt, /corner of the reference photo/);
+    assert.doesNotMatch(input.prompt, /keep every handheld|props to keep/i);
   });
 
   it("refuses Mix generate without a person mark", () => {

@@ -1,16 +1,19 @@
 /**
- * Swapr Mix — replace a marked person and marked props (fork of Swapr).
+ * Swapr Mix — replace every marked person and any marked props (fork of Swapr).
  * Original Swapr remains on wan22-templates main / production hosts.
  *
  * Templates from HF dataset CDN. Generate goes through same-origin
- * /api/generate when USE_PROXY is true (required on iPhone). Green points
- * and the person still replace a person. Red points and the prop still
- * replace a prop. The server composites both stills into the one reference
- * image Runpod accepts.
+ * /api/generate when USE_PROXY is true (required on iPhone). Each green mark
+ * is one person and gets its own face slot (Person 1, Person 2, …). The
+ * phone stitches those faces left to right into the one reference image Wan
+ * Animate accepts, and sends every green point as a positive SAM mark. Red
+ * marks replace props; those stills are stitched the same way and the server
+ * insets them into the corner of that reference image.
  */
 import { inject } from '@vercel/analytics';
 import { generateFailureText, publicErrorText } from "../server/gatewayError.js";
-import { MIX_DEFAULT_PROMPT, MIX_PROP_PROMPT, LEGACY_KEEP_PROMPTS } from "../server/mixPoints.js";
+import { generateBlockReason, slotLabel } from "../server/markPairing.js";
+import { isBareMixPrompt, mixStockPrompt } from "../server/mixPoints.js";
 import { rewriteSpaceVideoUrl } from "../server/videoUrl.js";
 
 // Initialize Vercel Web Analytics
@@ -65,14 +68,10 @@ const els = {
   maskClear: document.getElementById("mask-clear"),
   uploadSection: document.getElementById("upload-section"),
   uploadHint: document.getElementById("upload-hint"),
-  uploadZone: document.getElementById("upload-zone"),
-  uploadInner: document.getElementById("upload-inner"),
-  photoInput: document.getElementById("photo-input"),
-  personPreviews: document.getElementById("person-previews"),
-  propZone: document.getElementById("prop-upload-zone"),
-  propInner: document.getElementById("prop-upload-inner"),
-  propInput: document.getElementById("prop-input"),
-  propPreviews: document.getElementById("prop-previews"),
+  personSlots: document.getElementById("person-slots"),
+  personSlotsEmpty: document.getElementById("person-slots-empty"),
+  propSlots: document.getElementById("prop-slots"),
+  propSlotsEmpty: document.getElementById("prop-slots-empty"),
   prompt: document.getElementById("prompt"),
   gateHint: document.getElementById("gate-hint"),
   btnGen: document.getElementById("btn-generate"),
@@ -145,17 +144,16 @@ function workerSize(size) {
   return { width: 640, height: 640 };
 }
 
-function generateBlockReason() {
-  if (!selectedId) return "Pick a motion first.";
-  if (!positivePoints.length) return "Tap the person to replace (green).";
-  if (!personFiles.length) return "Upload a replacement image for the green-dot person.";
-  if (propPoints.length && !propFiles.length) return "Upload a replacement image for the red-dot prop.";
-  if (propFiles.length && !propPoints.length) return "Tap the prop to replace (red).";
-  return "";
+function blockReason() {
+  return generateBlockReason({
+    hasMotion: Boolean(selectedId),
+    personFiles,
+    propFiles,
+  });
 }
 
 function updateGenerateEnabled() {
-  const reason = generateBlockReason();
+  const reason = blockReason();
   els.btnGen.disabled = Boolean(reason);
   els.btnGen.title = reason;
   if (els.gateHint) els.gateHint.textContent = selectedId ? reason : "";
@@ -174,10 +172,33 @@ function updateMaskStatus() {
   const p = positivePoints.length;
   const n = propPoints.length;
   if (!p && !n) {
-    els.maskStatus.textContent = "No marks yet. Tap the person to replace (green), then the prop to replace (red).";
+    els.maskStatus.textContent =
+      "No marks yet. Tap each person to replace (green), then each prop to replace (red).";
     return;
   }
-  els.maskStatus.textContent = `${p} person mark${p === 1 ? "" : "s"} · ${n} prop mark${n === 1 ? "" : "s"}`;
+  const people = Array.from({ length: p }, (_, i) => slotLabel("person", i)).join(", ");
+  const props = n ? Array.from({ length: n }, (_, i) => slotLabel("prop", i)).join(", ") : "";
+  const missingFace = personFiles.findIndex((file) => !file);
+  const missingProp = propFiles.findIndex((file) => !file);
+  let next = "";
+  if (missingFace >= 0) next = ` Upload a face for ${slotLabel("person", missingFace)}.`;
+  else if (missingProp >= 0) next = ` Upload a still for ${slotLabel("prop", missingProp)}.`;
+  els.maskStatus.textContent = `${props ? `${people} · ${props}` : people}.${next}`;
+}
+
+function drawDot(ctx, x, y, fill, stroke, label) {
+  ctx.beginPath();
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = 2;
+  ctx.arc(x, y, 12, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = stroke;
+  ctx.font = "700 12px ui-sans-serif, system-ui, sans-serif";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.fillText(String(label), x, y + 0.5);
 }
 
 function drawMaskCanvas() {
@@ -193,32 +214,34 @@ function drawMaskCanvas() {
   ctx.drawImage(frameBitmap, 0, 0, w, h);
   const sx = w / frameNatural.width;
   const sy = h / frameNatural.height;
-  for (const pt of positivePoints) {
-    ctx.beginPath();
-    ctx.fillStyle = "rgba(74, 222, 128, 0.95)";
-    ctx.strokeStyle = "#052e16";
-    ctx.lineWidth = 2;
-    ctx.arc(pt.x * sx, pt.y * sy, 8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
-  for (const pt of propPoints) {
-    ctx.beginPath();
-    ctx.fillStyle = "rgba(248, 113, 113, 0.95)";
-    ctx.strokeStyle = "#450a0a";
-    ctx.lineWidth = 2;
-    ctx.arc(pt.x * sx, pt.y * sy, 8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.stroke();
-  }
+  positivePoints.forEach((pt, index) => {
+    drawDot(ctx, pt.x * sx, pt.y * sy, "rgba(74, 222, 128, 0.95)", "#052e16", index + 1);
+  });
+  propPoints.forEach((pt, index) => {
+    drawDot(ctx, pt.x * sx, pt.y * sy, "rgba(248, 113, 113, 0.95)", "#450a0a", index + 1);
+  });
+}
+
+function syncDefaultPrompt() {
+  if (!els.prompt) return;
+  const current = els.prompt.value.trim();
+  if (!isBareMixPrompt(current)) return;
+  els.prompt.value = mixStockPrompt(propPoints.length > 0, positivePoints.length);
+}
+
+function refreshMarks() {
+  updateMaskStatus();
+  drawMaskCanvas();
+  renderMarkSlots();
+  syncDefaultPrompt();
 }
 
 function clearMaskPoints() {
   positivePoints = [];
   propPoints = [];
-  updateMaskStatus();
-  drawMaskCanvas();
-  updateGenerateEnabled();
+  personFiles = [];
+  propFiles = [];
+  refreshMarks();
 }
 
 async function loadMaskFrame(t) {
@@ -291,11 +314,25 @@ function onMaskPointer(event) {
   event.preventDefault();
   const pt = canvasToNatural(event);
   if (!pt) return;
-  if (maskMode === "prop") propPoints.push(pt);
-  else positivePoints.push(pt);
-  updateMaskStatus();
-  drawMaskCanvas();
-  updateGenerateEnabled();
+  if (maskMode === "prop") {
+    propPoints.push(pt);
+    propFiles.push(null);
+  } else {
+    positivePoints.push(pt);
+    personFiles.push(null);
+  }
+  refreshMarks();
+}
+
+function removeMark(kind, index) {
+  if (kind === "prop") {
+    propPoints.splice(index, 1);
+    propFiles.splice(index, 1);
+  } else {
+    positivePoints.splice(index, 1);
+    personFiles.splice(index, 1);
+  }
+  refreshMarks();
 }
 
 function armVideo(vid) {
@@ -347,25 +384,28 @@ function observeRail() {
   syncPlayback();
 }
 
+function uploadsLocked() {
+  return !selectedId || els.uploadSection.classList.contains("is-locked");
+}
+
 function lockUpload() {
   els.uploadSection.classList.add("is-locked");
   els.uploadSection.classList.remove("is-ready");
   els.uploadSection.setAttribute("aria-disabled", "true");
-  els.photoInput.disabled = true;
-  if (els.propInput) els.propInput.disabled = true;
-  els.uploadHint.textContent = "Pick a motion above to unlock replacement stills.";
+  els.uploadHint.textContent = "Pick a motion, then mark each person. A face slot appears for every green mark.";
   els.selectedPanel.hidden = true;
+  renderMarkSlots();
 }
 
 function focusUpload() {
   els.uploadSection.classList.remove("is-locked");
   els.uploadSection.classList.add("is-ready");
   els.uploadSection.setAttribute("aria-disabled", "false");
-  els.photoInput.disabled = false;
-  if (els.propInput) els.propInput.disabled = false;
-  els.uploadHint.textContent = "Upload a still for the green-dot person, and a still for the red-dot prop.";
+  els.uploadHint.textContent =
+    "Upload one face for each green mark (Person 1, Person 2, …) and one still for each red prop mark.";
   els.uploadSection.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
   els.uploadSection.focus({ preventScroll: true });
+  renderMarkSlots();
 }
 
 async function loadCatalog() {
@@ -473,63 +513,107 @@ function revokePreviews(kind) {
   previewUrls[kind] = [];
 }
 
-function renderPreviews(kind) {
+function setSlotFile(kind, index, fileList) {
+  if (uploadsLocked()) return;
+  const file = imageFiles(fileList)[0];
+  if (!file) return;
   const files = kind === "prop" ? propFiles : personFiles;
-  const host = kind === "prop" ? els.propPreviews : els.personPreviews;
-  const inner = kind === "prop" ? els.propInner : els.uploadInner;
-  if (!host) return;
-  revokePreviews(kind);
-  host.replaceChildren();
-  if (!files.length) {
-    host.hidden = true;
-    if (inner) inner.hidden = false;
-    return;
-  }
-  if (inner) inner.hidden = true;
-  host.hidden = false;
-  for (const file of files) {
-    const url = URL.createObjectURL(file);
-    previewUrls[kind].push(url);
-    const img = document.createElement("img");
-    img.src = url;
-    img.alt = kind === "prop" ? "Prop replacement preview" : "Person replacement preview";
-    host.appendChild(img);
-  }
+  if (index < 0 || index >= files.length) return;
+  files[index] = file;
+  refreshMarks();
 }
 
-function setStills(kind, fileList) {
-  const input = kind === "prop" ? els.propInput : els.photoInput;
-  if (!selectedId || !input || input.disabled) return;
-  const files = imageFiles(fileList);
-  if (!files.length) return;
-  if (kind === "prop") propFiles = files;
-  else personFiles = files;
-  renderPreviews(kind);
+function renderMarkSlots() {
+  renderKindSlots("person");
+  renderKindSlots("prop");
   updateGenerateEnabled();
 }
 
-function bindStillInput(input, zone, kind) {
-  if (!input) return;
-  input.addEventListener("change", () => {
-    if (input.files && input.files.length) setStills(kind, input.files);
-  });
-  if (!zone) return;
-  zone.addEventListener("dragover", (e) => {
-    if (!selectedId) return;
-    e.preventDefault();
-    zone.classList.add("drag");
-  });
-  zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
-  zone.addEventListener("drop", (e) => {
-    if (!selectedId) return;
-    e.preventDefault();
-    zone.classList.remove("drag");
-    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) setStills(kind, e.dataTransfer.files);
+function renderKindSlots(kind) {
+  const isProp = kind === "prop";
+  const files = isProp ? propFiles : personFiles;
+  const host = isProp ? els.propSlots : els.personSlots;
+  const empty = isProp ? els.propSlotsEmpty : els.personSlotsEmpty;
+  if (!host) return;
+  revokePreviews(kind);
+  host.replaceChildren();
+  if (empty) empty.hidden = files.length > 0;
+  files.forEach((file, index) => {
+    const label = slotLabel(kind, index);
+    const slot = document.createElement("div");
+    slot.className = "mark-slot";
+
+    const head = document.createElement("div");
+    head.className = "mark-slot-head";
+    const title = document.createElement("strong");
+    title.className = isProp ? "dot-red" : "dot-green";
+    title.textContent = label;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "ghost slot-remove";
+    remove.textContent = "Remove";
+    remove.setAttribute("aria-label", `Remove ${label}`);
+    remove.addEventListener("click", () => removeMark(kind, index));
+    head.append(title, remove);
+
+    const zone = document.createElement("label");
+    zone.className = `upload-zone ${isProp ? "prop-zone" : "person-zone"}${file ? " has-file" : ""}`;
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = "image/*";
+    input.hidden = true;
+    input.disabled = uploadsLocked();
+    input.className = isProp ? "prop-input" : "photo-input";
+    input.setAttribute("aria-label", `${isProp ? "Prop still" : "Face"} for ${label}`);
+    input.addEventListener("change", () => {
+      if (input.files && input.files.length) setSlotFile(kind, index, input.files);
+    });
+    zone.addEventListener("dragover", (event) => {
+      if (uploadsLocked()) return;
+      event.preventDefault();
+      zone.classList.add("drag");
+    });
+    zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
+    zone.addEventListener("drop", (event) => {
+      if (uploadsLocked()) return;
+      event.preventDefault();
+      zone.classList.remove("drag");
+      if (event.dataTransfer && event.dataTransfer.files && event.dataTransfer.files.length) {
+        setSlotFile(kind, index, event.dataTransfer.files);
+      }
+    });
+
+    const inner = document.createElement("div");
+    inner.className = "upload-inner";
+    const icon = document.createElement("div");
+    icon.className = "upload-icon";
+    icon.setAttribute("aria-hidden", "true");
+    icon.textContent = "⬆";
+    const strong = document.createElement("strong");
+    strong.textContent = isProp ? `Upload still for ${label}` : `Upload face for ${label}`;
+    const hint = document.createElement("span");
+    hint.className = "muted";
+    hint.textContent = "One still · JPG / PNG";
+    inner.append(icon, strong, hint);
+    zone.append(input, inner);
+
+    if (file) {
+      const url = URL.createObjectURL(file);
+      previewUrls[kind].push(url);
+      const img = document.createElement("img");
+      img.src = url;
+      img.alt = `${label} replacement`;
+      img.className = "slot-preview";
+      const caption = document.createElement("span");
+      caption.className = "slot-replace";
+      caption.textContent = "Tap to replace";
+      zone.append(img, caption);
+    }
+
+    slot.append(head, zone);
+    host.append(slot);
   });
 }
-
-bindStillInput(els.photoInput, els.uploadZone, "person");
-bindStillInput(els.propInput, els.propZone, "prop");
 
 els.refresh.addEventListener("click", () => loadCatalog());
 window.addEventListener("scroll", syncPlayback, { passive: true });
@@ -652,9 +736,14 @@ function drawContained(ctx, bitmap, x, y, w, h) {
 /**
  * Phone stills (including HEIC) are re-encoded to JPEG.
  * Person stills are letterboxed (padded, never cropped) to the motion clip's
- * aspect. Several person stills sit side by side in that frame.
+ * aspect. Several faces sit side by side, Person 1 on the left, in tap order.
+ * That strip is the one reference image Wan Animate accepts. When a prop
+ * still is also being sent, the multi-face strip keeps the bottom band clear
+ * so the server can inset the prop without covering the last face. One face
+ * stays full-frame, same as single-person replace.
  */
-async function personStillForUpload(files, target) {
+async function personStillForUpload(files, target, options = {}) {
+  const reservePropCorner = Boolean(options.reservePropCorner);
   const list = (files || []).filter(Boolean);
   if (!list.length) return null;
   let bitmaps = [];
@@ -692,8 +781,10 @@ async function personStillForUpload(files, target) {
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, width, height);
+    const reserveBand = reservePropCorner && bitmaps.length > 1;
     const cellW = width / bitmaps.length;
-    bitmaps.forEach((bitmap, index) => drawContained(ctx, bitmap, cellW * index, 0, cellW, height));
+    const cellH = reserveBand ? height * 0.7 : height;
+    bitmaps.forEach((bitmap, index) => drawContained(ctx, bitmap, cellW * index, 0, cellW, cellH));
     return (await canvasToJpeg(canvas, "person.jpg")) || list[0];
   } catch {
     return list[0];
@@ -702,7 +793,7 @@ async function personStillForUpload(files, target) {
   }
 }
 
-/** Prop stills stay in their own frame, side by side when there is more than one. */
+/** Prop stills stay in their own frame, Prop 1 on the left, in tap order. */
 async function propStillForUpload(files) {
   const list = (files || []).filter(Boolean);
   if (!list.length) return null;
@@ -784,7 +875,7 @@ function generateArgs(size) {
   return {
     template_id: selectedId,
     video_url: selected ? videoUrl(selected) : "",
-    prompt: els.prompt.value.trim() || (propPoints.length ? MIX_PROP_PROMPT : MIX_DEFAULT_PROMPT),
+    prompt: els.prompt.value.trim() || mixStockPrompt(propPoints.length > 0, positivePoints.length),
     template_width: size ? size.width : undefined,
     template_height: size ? size.height : undefined,
     frame_width: frameNatural.width || undefined,
@@ -907,7 +998,7 @@ els.maskCanvas?.addEventListener("pointerdown", onMaskPointer);
 window.addEventListener("resize", () => drawMaskCanvas());
 
 els.btnGen.addEventListener("click", async () => {
-  const blocked = generateBlockReason();
+  const blocked = blockReason();
   if (blocked) {
     if (els.gateHint) els.gateHint.textContent = blocked;
     return;
@@ -916,10 +1007,14 @@ els.btnGen.addEventListener("click", async () => {
   try {
     const size = await templateSize(templates.find((t) => t.id === selectedId));
     const target = workerSize(size);
-    const personStill = await personStillForUpload(personFiles, target);
-    const propStill = propFiles.length ? await propStillForUpload(propFiles) : null;
+    const faces = personFiles.filter(Boolean);
+    const props = propFiles.filter(Boolean);
+    const personStill = await personStillForUpload(faces, target, {
+      reservePropCorner: props.length > 0 && faces.length > 1,
+    });
+    const propStill = props.length ? await propStillForUpload(props) : null;
     if (!personStill) throw new Error("Could not read the person still.");
-    if (propFiles.length && !propStill) throw new Error("Could not read the prop still.");
+    if (props.length && !propStill) throw new Error("Could not read the prop still.");
     const args = generateArgs(size);
     if (USE_PROXY) {
       const data = await callSpace("/generate", {
@@ -1032,10 +1127,7 @@ els.btnStop?.addEventListener("click", async () => {
   }
 });
 
-if (els.prompt) {
-  const current = els.prompt.value.trim();
-  if (!current || LEGACY_KEEP_PROMPTS.includes(current)) els.prompt.value = MIX_PROP_PROMPT;
-}
+syncDefaultPrompt();
 refreshBalance();
 setInterval(refreshBalance, 30000);
 updateGenerateEnabled();
