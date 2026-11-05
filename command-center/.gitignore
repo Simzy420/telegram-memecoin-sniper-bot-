@@ -1,0 +1,17 @@
+node_modules
+dist
+__pycache__/
+*.pyc
+.vercel
+src/adapters/imagegen/openaiApi.js
+dist-ssr
+*.local
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+dev-dist
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.data/
