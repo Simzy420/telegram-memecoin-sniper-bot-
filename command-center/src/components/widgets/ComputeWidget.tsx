@@ -204,6 +204,14 @@ export function ComputeWidget({ widget }: WidgetRenderProps) {
           <div className="flex items-center gap-2">
             <Zap className="h-4 w-4 text-violet-300" />
             <span className="text-xs uppercase tracking-widest text-white/55">RunPod Balance</span>
+            <a
+              href="https://console.runpod.io/user/billing"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="ml-auto rounded-full border border-violet-400/40 bg-violet-500/15 px-2.5 py-0.5 text-xs font-semibold text-violet-200 hover:bg-violet-500/30"
+            >
+              💳 Buy credits
+            </a>
           </div>
           {rp ? (
             <>
