@@ -4,9 +4,12 @@ import {
   LEGACY_KEEP_PROMPTS,
   MIX_DEFAULT_NEGATIVE,
   MIX_DEFAULT_PROMPT,
+  MIX_MULTI_PROMPT,
+  MIX_MULTI_PROP_PROMPT,
   MIX_PROP_PROMPT,
   buildMaskPointFields,
   mixPrompt,
+  mixStockPrompt,
   normalizePoints,
   scalePoints,
 } from "../server/mixPoints.js";
@@ -75,5 +78,14 @@ describe("mixPoints", () => {
     assert.equal(mixPrompt(MIX_PROP_PROMPT, false), MIX_DEFAULT_PROMPT);
     assert.equal(mixPrompt(MIX_DEFAULT_PROMPT, true), MIX_PROP_PROMPT);
     assert.match(mixPrompt("a person", true), /marked handheld prop/);
+    assert.equal(mixStockPrompt(false, 1), MIX_DEFAULT_PROMPT);
+    assert.equal(mixStockPrompt(true, 1), MIX_PROP_PROMPT);
+    assert.equal(mixPrompt(MIX_DEFAULT_PROMPT, false, 2), MIX_MULTI_PROMPT);
+    assert.equal(mixPrompt(MIX_PROP_PROMPT, true, 2), MIX_MULTI_PROP_PROMPT);
+    assert.match(MIX_MULTI_PROMPT, /left to right/);
+    assert.match(MIX_MULTI_PROP_PROMPT, /each marked handheld prop/);
+    assert.doesNotMatch(MIX_MULTI_PROMPT, /keep every handheld|props to keep/i);
+    assert.match(mixPrompt("a person", false, 2), /each marked person/);
+    assert.doesNotMatch(mixPrompt("a person", false, 1), /each marked person/);
   });
 });

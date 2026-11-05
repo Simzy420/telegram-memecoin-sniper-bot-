@@ -1,8 +1,10 @@
 /**
  * The Wan Animate Runpod handler has one reference image (image_base64).
- * Mix composites the prop still into the corner of the person still so the
- * worker actually sees both replacements. prop_image_base64 is still sent
- * alongside that composite.
+ * Several faces are already one JPEG by the time they get here: the phone
+ * places Person 1, Person 2, … left to right. This module only insets the
+ * prop still into the corner of that image so the worker sees the prop too.
+ * prop_image_base64 is still sent alongside the composite. One face is
+ * letterboxed alone, then the prop is inset the same way.
  */
 import { decode, encode } from "jpeg-js";
 

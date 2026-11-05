@@ -3,9 +3,11 @@
  * (wlsdml1114/Wan_Animate_Runpod_hub handler).
  *
  * This fork is separate from original Swapr (wan22-templates main).
- * Mix always sends SAM control points. Green marks the person to replace.
- * Red marks a prop to replace. The prop still is composited into the single
- * reference image the handler accepts, and also sent as prop_image_base64.
+ * Mix always sends SAM control points. Green marks each person to replace.
+ * Red marks each prop to replace. The handler accepts one reference image:
+ * the phone composites every face left to right into image_base64 (one face
+ * is unchanged). The prop still is inset into that image, and also sent as
+ * prop_image_base64.
  *
  * POST {endpoint}/run, then poll {endpoint}/status/{id}.
  * The handler accepts image_base64 plus a public video_url, and returns
@@ -193,7 +195,8 @@ export function buildRunpodInput(fields = {}) {
   assertMixMarks(fields, { hasPropImage });
   const size = targetSize(fields);
   const negative = String(fields.negative_prompt || fields.negative || "").trim();
-  const prompt = mixPrompt(fields.prompt, hasPropImage);
+  const personCount = normalizePoints(fields.positive_points).length;
+  const prompt = mixPrompt(fields.prompt, hasPropImage, personCount);
   let image_base64 = fields.image_base64;
   if (hasPropImage) {
     image_base64 = compositeReferenceBase64(fields.image_base64, fields.prop_image_base64) || fields.image_base64;
