@@ -9,7 +9,7 @@ import { publicErrorText, scrubGenerateError } from "./gatewayError.js";
 import { DEFAULT_SPACE } from "./videoUrl.js";
 import { uploadFiles } from "./gradioHttp.js";
 import { callSpaceApi, ProxyError } from "./gradioProxy.js";
-import { hfGenerateEnabled, resolveMotionVideoUrl, runpodConfigured, runRunpodGenerate } from "./runpod.js";
+import { assertMixMarks, hfGenerateEnabled, resolveMotionVideoUrl, runpodConfigured, runRunpodGenerate } from "./runpod.js";
 
 export const JOB_STORE = "wan22-jobs";
 
@@ -206,16 +206,20 @@ export async function enqueueGenerateJob(job, deps = {}) {
   const useRunpod = job.api === "/generate" && runpodConfigured(env);
   let image = null;
   let image_base64 = null;
+  let prop_image_base64 = null;
   let video_url = null;
   let backend = "hf";
   if (useRunpod) {
-    if (!job.photo) throw new ProxyError("Upload a still photo of the person who should do this motion.", 400);
+    if (!job.photo) throw new ProxyError("Upload a still photo of the person who should replace the marked person.", 400);
     try {
+      assertMixMarks(job.payload, { hasPropImage: Boolean(job.propPhoto) });
       image_base64 = await stillBase64(job.photo);
+      if (job.propPhoto) prop_image_base64 = await stillBase64(job.propPhoto);
       video_url = await resolveMotionVideoUrl(job.payload || {}, { fetch: fetchImpl });
     } catch (error) {
       if (error instanceof ProxyError) throw error;
-      throw new ProxyError(errorText(error, env, job.api), 400);
+      const message = error instanceof Error ? error.message : errorText(error, env, job.api);
+      throw new ProxyError(message, Number.isInteger(error?.statusCode) ? error.statusCode : 400);
     }
     backend = "runpod";
   } else if (job.api === "/generate" && !hfGenerateEnabled(env)) {
@@ -246,6 +250,7 @@ export async function enqueueGenerateJob(job, deps = {}) {
     backend,
     image,
     image_base64,
+    prop_image_base64,
     video_url,
   };
   const store = deps.store || netlifyJobStore(deps.event);

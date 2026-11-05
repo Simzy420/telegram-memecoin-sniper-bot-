@@ -2,7 +2,7 @@
   "name": "swapr-mix",
   "private": true,
   "version": "1.0.0",
-  "description": "Swapr Mix — person-mask replace fork. Original Swapr (wan22-templates) stays on main.",
+  "description": "Swapr Mix — replace a marked person and marked props. Original Swapr (wan22-templates) stays on main.",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -14,7 +14,8 @@
     "@gradio/client": "^1.15.0",
     "@netlify/blobs": "^8.2.0",
     "@vercel/analytics": "^2.0.1",
-    "busboy": "^1.6.0"
+    "busboy": "^1.6.0",
+    "jpeg-js": "^0.4.4"
   },
   "devDependencies": {
     "vite": "^6.0.0"

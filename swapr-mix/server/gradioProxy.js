@@ -2,7 +2,7 @@
  * Shared generate/extend proxy used by Vercel (`api/generate.js`) and
  * Netlify (`netlify/functions/generate.js`).
  *
- * POST multipart: api, payload (JSON string), optional photo file.
+ * POST multipart: api, payload (JSON string), optional photo and prop_photo files.
  * POST JSON: { api, payload }.
  *
  * Calls the Hugging Face Space with a fetch-only Gradio queue client so the
@@ -175,6 +175,7 @@ async function readRequest(request) {
   let api = "/generate";
   let payload = {};
   let photo = null;
+  let propPhoto = null;
 
   if (contentType.includes("multipart/form-data")) {
     let form;
@@ -195,6 +196,8 @@ async function readRequest(request) {
     }
     const file = form.get("photo");
     if (isUpload(file)) photo = file;
+    const propFile = form.get("prop_photo");
+    if (isUpload(propFile)) propPhoto = propFile;
   } else {
     let body;
     try {
@@ -212,7 +215,7 @@ async function readRequest(request) {
     }
   }
 
-  return { api: normalizeApi(api), payload, photo };
+  return { api: normalizeApi(api), payload, photo, propPhoto };
 }
 
 async function defaultConnect(space, token) {
@@ -248,23 +251,24 @@ export async function handleGenerateRequest(request, deps = {}) {
   let apiName = "";
   const env = deps.env || process.env;
   try {
-    const { api, payload, photo } = await readRequest(request);
+    const { api, payload, photo, propPhoto } = await readRequest(request);
     apiName = api;
     if (api === "/generate" && !photo) {
-      throw new ProxyError("Upload a still photo of the person who should do this motion.", 400);
+      throw new ProxyError("Upload a still photo of the person who should replace the marked person.", 400);
     }
     // Netlify queues every API (60s sync cap) and the worker calls Runpod.
     // Vercel has no queue: Generate submits /run here and the phone polls
     // /status. The Space is only for Extend, or for Generate when
     // HF_GENERATE_FALLBACK is set and Runpod is unset.
     if (typeof deps.enqueue === "function") {
-      const queued = await deps.enqueue({ api, payload, photo, env });
+      const queued = await deps.enqueue({ api, payload, photo, propPhoto, env });
       return jsonResponse(queued, 202);
     }
     if (api === "/generate" && runpodConfigured(env)) {
       const queued = await submitGenerateOnRunpod({
         payload,
         photo,
+        propPhoto,
         env,
         fetch: deps.fetch,
       });

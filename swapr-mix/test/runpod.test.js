@@ -111,18 +111,44 @@ describe("Runpod Wan Animate client", () => {
     assert.equal(input.video_url, MOTION);
     assert.equal("video_base64" in input, false);
     assert.equal(input.image_base64, "abc");
+    assert.equal("prop_image_base64" in input, false);
     assert.equal(input.width, 480);
     assert.equal(input.height, 832);
     assert.equal(input.fps, 16);
     assert.equal(input.cfg, 5);
-    assert.equal(input.steps, 10);
+    assert.equal(input.steps, 5);
     assert.equal(input.mode, "replace");
     assert.equal(input.seed, 42);
-    assert.match(input.negative_prompt, /missing prop|rubber|plastic/i);
-    assert.match(input.prompt, /replace only|handheld|a person/i);
+    assert.match(input.negative_prompt, /低质量|畸形的/);
+    assert.match(input.prompt, /replace the marked person/);
+    assert.match(input.prompt, /a person/);
+    assert.doesNotMatch(input.prompt, /keep every handheld|props to keep/i);
+    assert.deepEqual(JSON.parse(input.coordinates), [{ x: 192, y: 332.8 }]);
+    assert.deepEqual(JSON.parse(input.neg_coordinates), [{ x: 0, y: 0 }]);
     assert.ok(input.points_store);
-    assert.ok(input.coordinates);
-    assert.ok(input.neg_coordinates);
+  });
+
+  it("refuses a prop still with no red mark, and a red mark with no prop still", () => {
+    assert.throws(
+      () =>
+        buildRunpodInput({
+          image_base64: "abc",
+          prop_image_base64: "prop",
+          video_url: MOTION,
+          positive_points: [{ x: 1, y: 2 }],
+        }),
+      /Tap the prop to replace/,
+    );
+    assert.throws(
+      () =>
+        buildRunpodInput({
+          image_base64: "abc",
+          video_url: MOTION,
+          positive_points: [{ x: 1, y: 2 }],
+          prop_points: [{ x: 3, y: 4 }],
+        }),
+      /red-dot prop/,
+    );
   });
 
   it("refuses Mix generate without a person mark", () => {

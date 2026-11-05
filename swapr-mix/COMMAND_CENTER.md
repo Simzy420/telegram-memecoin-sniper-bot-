@@ -8,7 +8,7 @@ Add a fifth Image gen mode in Command Center:
 ## 1. `src/adapters/swaprMix.ts`
 
 ```ts
-/** Swapr Mix — person-mask replace (props stay). Separate from original Swapr. */
+/** Swapr Mix — replace a marked person and marked props. Separate from original Swapr. */
 export const SWAPR_MIX_APP_URL =
   import.meta.env.VITE_SWAPR_MIX_URL || 'https://swapr-mix.vercel.app/';
 ```
@@ -16,7 +16,7 @@ export const SWAPR_MIX_APP_URL =
 ## 2. `src/components/widgets/SwaprMixPanel.tsx`
 
 Copy `SwaprPanel.tsx`, import `SWAPR_MIX_APP_URL`, retitle to **Swapr Mix**, and note:
-mark person (green) / keep props (red) before Generate.
+mark person (green) and prop (red), then upload a still for each, before Generate.
 
 ## 3. Image model
 

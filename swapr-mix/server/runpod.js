@@ -3,8 +3,9 @@
  * (wlsdml1114/Wan_Animate_Runpod_hub handler).
  *
  * This fork is separate from original Swapr (wan22-templates main).
- * Mix always sends SAM control points so the person is replaced while
- * negatively marked props stay from the template video.
+ * Mix always sends SAM control points. Green marks the person to replace.
+ * Red marks a prop to replace. The prop still is composited into the single
+ * reference image the handler accepts, and also sent as prop_image_base64.
  *
  * POST {endpoint}/run, then poll {endpoint}/status/{id}.
  * The handler accepts image_base64 plus a public video_url, and returns
@@ -14,9 +15,11 @@
 
 import {
   MIX_DEFAULT_NEGATIVE,
-  MIX_DEFAULT_PROMPT,
   buildMaskPointFields,
+  mixPrompt,
+  normalizePoints,
 } from "./mixPoints.js";
+import { compositeReferenceBase64 } from "./referenceStill.js";
 
 export const TEMPLATE_CATALOG_URL =
   "https://huggingface.co/datasets/Simzy/wan22-template-clips/resolve/main/templates/catalog.json";
@@ -160,6 +163,25 @@ export function targetSize(fields = {}) {
   return { width: RUNPOD_DEFAULTS.width, height: RUNPOD_DEFAULTS.height };
 }
 
+export function assertMixMarks(fields = {}, { hasPropImage = false } = {}) {
+  if (!normalizePoints(fields.positive_points).length && !(typeof fields.coordinates === "string" && fields.coordinates.trim())) {
+    const error = new Error("Tap the person to replace (green) before Generate.");
+    error.statusCode = 400;
+    throw error;
+  }
+  const prop = normalizePoints(fields.prop_points);
+  if (prop.length && !hasPropImage) {
+    const error = new Error("Upload a replacement image for the red-dot prop before Generate.");
+    error.statusCode = 400;
+    throw error;
+  }
+  if (hasPropImage && !prop.length) {
+    const error = new Error("Tap the prop to replace (red) before Generate.");
+    error.statusCode = 400;
+    throw error;
+  }
+}
+
 export function buildRunpodInput(fields = {}) {
   if (!fields.image_base64 || typeof fields.image_base64 !== "string") {
     throw new Error("The still photo was empty.");
@@ -167,11 +189,14 @@ export function buildRunpodInput(fields = {}) {
   if (!isAllowedTemplateVideoUrl(fields.video_url)) {
     throw new Error("The template motion video URL is not a public Hugging Face clip.");
   }
+  const hasPropImage = typeof fields.prop_image_base64 === "string" && fields.prop_image_base64.length > 0;
+  assertMixMarks(fields, { hasPropImage });
   const size = targetSize(fields);
   const negative = String(fields.negative_prompt || fields.negative || "").trim();
-  let prompt = String(fields.prompt || "").trim() || MIX_DEFAULT_PROMPT;
-  if (!/keep every handheld|keep.*prop|replace only/i.test(prompt)) {
-    prompt = `${MIX_DEFAULT_PROMPT}. ${prompt}`;
+  const prompt = mixPrompt(fields.prompt, hasPropImage);
+  let image_base64 = fields.image_base64;
+  if (hasPropImage) {
+    image_base64 = compositeReferenceBase64(fields.image_base64, fields.prop_image_base64) || fields.image_base64;
   }
   const mask = buildMaskPointFields({
     ...fields,
@@ -179,14 +204,12 @@ export function buildRunpodInput(fields = {}) {
     height: size.height,
   });
   if (!mask.points_store) {
-    throw new Error(
-      "Tap the person on the template frame (green), and tap props to keep (red), before Generate."
-    );
+    throw new Error("Tap the person to replace (green) before Generate.");
   }
   const cfg = Number(fields.cfg ?? fields.guidance);
   const steps = Number(fields.steps);
-  return {
-    image_base64: fields.image_base64,
+  const input = {
+    image_base64,
     video_url: fields.video_url,
     prompt: prompt.slice(0, 2000),
     negative_prompt: (negative || RUNPOD_DEFAULTS.negative_prompt).slice(0, 1000),
@@ -195,10 +218,12 @@ export function buildRunpodInput(fields = {}) {
     fps: RUNPOD_DEFAULTS.fps,
     cfg: Number.isFinite(cfg) && cfg > 0 ? cfg : RUNPOD_DEFAULTS.cfg,
     steps: Number.isFinite(steps) && steps > 0 ? Math.min(30, Math.floor(steps)) : RUNPOD_DEFAULTS.steps,
-    // Mix is always replace + SAM points (props stay when marked negative).
+    // Mix is always replace. Positive SAM points cover the person and any prop.
     mode: "replace",
     ...mask,
   };
+  if (hasPropImage) input.prop_image_base64 = fields.prop_image_base64;
+  return input;
 }
 
 function pickMessage(json, text) {
@@ -305,7 +330,7 @@ function statusError(message, statusCode) {
 
 export async function stillToBase64(photo) {
   if (!photo || typeof photo.arrayBuffer !== "function") {
-    throw statusError("Upload a still photo of the person who should do this motion.", 400);
+    throw statusError("Upload a still photo of the person who should replace the marked person.", 400);
   }
   const buf = Buffer.from(await photo.arrayBuffer());
   if (!buf.length) throw statusError("The still photo was empty.", 400);
@@ -482,17 +507,17 @@ export async function submitAndWait(env, input, deps = {}) {
  * Vercel has no background worker. POST /run and return the Runpod job id.
  * The phone polls /api/job, which calls /status.
  */
-export async function submitGenerateOnRunpod({ payload, photo, env, fetch: fetchImpl } = {}) {
-  let image_base64;
-  let video_url;
+export async function submitGenerateOnRunpod({ payload, photo, propPhoto, env, fetch: fetchImpl } = {}) {
+  let input;
   try {
-    image_base64 = await stillToBase64(photo);
-    video_url = await resolveMotionVideoUrl(payload || {}, { fetch: fetchImpl || fetch });
+    const image_base64 = await stillToBase64(photo);
+    const prop_image_base64 = propPhoto ? await stillToBase64(propPhoto) : undefined;
+    const video_url = await resolveMotionVideoUrl(payload || {}, { fetch: fetchImpl || fetch });
+    input = buildRunpodInput({ ...(payload || {}), video_url, image_base64, prop_image_base64 });
   } catch (error) {
     if (Number.isInteger(error?.statusCode)) throw error;
     throw statusError(error instanceof Error ? error.message : String(error), 400);
   }
-  const input = buildRunpodInput({ ...(payload || {}), video_url, image_base64 });
   const started = await startRunpodJob(env, input, { fetch: fetchImpl || fetch });
   return { job_id: started.id, phase: "queued" };
 }
@@ -518,7 +543,12 @@ export async function runRunpodGenerate(spec, deps = {}) {
   if (!spec?.image_base64) throw new Error("The still photo was empty.");
   const fetchImpl = deps.fetch || fetch;
   const video_url = spec.video_url || (await resolveMotionVideoUrl(spec.payload || {}, { fetch: fetchImpl }));
-  const input = buildRunpodInput({ ...(spec.payload || {}), video_url, image_base64: spec.image_base64 });
+  const input = buildRunpodInput({
+    ...(spec.payload || {}),
+    video_url,
+    image_base64: spec.image_base64,
+    prop_image_base64: spec.prop_image_base64,
+  });
   const completed = await submitAndWait(env, input, deps);
   const encoded = extractRunpodVideoBase64(completed?.output ?? completed);
   const bytes = decodeVideoBase64(encoded);

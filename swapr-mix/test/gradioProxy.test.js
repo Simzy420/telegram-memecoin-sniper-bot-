@@ -329,6 +329,42 @@ describe("handleGenerateRequest", () => {
     assert.doesNotMatch(JSON.stringify(body), /ZeroGPU|Space failed/);
   });
 
+  it("sends the prop still and red-dot marks on the Runpod replace job", async () => {
+    const form = new FormData();
+    form.append("api", "/generate");
+    form.append(
+      "payload",
+      JSON.stringify({
+        template_id: "demo-wave",
+        video_url: MOTION,
+        positive_points: [{ x: 10, y: 20 }],
+        prop_points: [{ x: 30, y: 40 }],
+      }),
+    );
+    form.append("photo", new File([Buffer.from("person-bytes")], "person.jpg", { type: "image/jpeg" }));
+    form.append("prop_photo", new File([Buffer.from("prop-bytes-ok")], "prop.jpg", { type: "image/jpeg" }));
+    const res = await handleGenerateRequest(new Request("http://local/api/generate", { method: "POST", body: form }), {
+      env: { RUNPOD_API_KEY: "test-key", RUNPOD_ENDPOINT_ID: "zrmwpir4qzs66s" },
+      fetch: async (url, init) => {
+        assert.match(url, /\/run$/);
+        const body = JSON.parse(init.body);
+        assert.equal(body.input.image_base64, Buffer.from("person-bytes").toString("base64"));
+        assert.equal(body.input.prop_image_base64, Buffer.from("prop-bytes-ok").toString("base64"));
+        assert.deepEqual(JSON.parse(body.input.coordinates), [
+          { x: 10, y: 20 },
+          { x: 30, y: 40 },
+        ]);
+        assert.match(body.input.prompt, /marked handheld prop/);
+        assert.doesNotMatch(body.input.prompt, /keep every handheld|props to keep/i);
+        return new Response(JSON.stringify({ id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", status: "IN_QUEUE" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        });
+      },
+    });
+    assert.equal(res.status, 202);
+  });
+
   it("does not call the Space when Generate has no Runpod key", async () => {
     let connected = false;
     const form = new FormData();
@@ -416,6 +452,7 @@ describe("platform entrypoints", () => {
         seed: 42,
         session_id: "keep",
         state: { video: "/secret" },
+        positive_points: [{ x: 40, y: 80 }],
       })
     );
     form.append("photo", new File([photoBytes], "phone.jpg", { type: "image/jpeg" }));
@@ -561,7 +598,17 @@ describe("phone UI wiring", () => {
     assert.match(page, /Swapr Mix/);
     assert.match(page, /Mark person/);
     assert.match(main, /positive_points/);
-    assert.match(main, /negative_points/);
+    assert.match(main, /prop_points/);
+    assert.match(main, /prop_photo/);
+    assert.match(main, /personFiles/);
+    assert.match(main, /propFiles/);
+    assert.doesNotMatch(main, /props to keep|negative_points|prop to keep/);
+    assert.match(page, /Mark prop/);
+    assert.match(page, /Green dot/);
+    assert.match(page, /Red dot/);
+    assert.match(page, /photo-input/);
+    assert.match(page, /prop-input/);
+    assert.doesNotMatch(page, /Mark keep|objects to keep|props to keep|Keep the props/);
     const toml = readFileSync(new URL("../netlify.toml", import.meta.url), "utf8");
     assert.match(toml, /\[functions\."generate-background"\]/);
     assert.match(toml, /background = true/);
