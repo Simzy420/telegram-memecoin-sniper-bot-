@@ -2,8 +2,11 @@
  * Swapr Mix — SAM control points for Wan Animate replace.
  *
  * The Runpod hub loads newWanAnimate_point_api.json only when points_store
- * is set. Positive points mark the person to replace. Negative points mark
- * props / objects that must stay from the template (e.g. a popsicle).
+ * is set. Sam2Segmentation uses the positive coordinates. Green marks are
+ * the person to replace. Red marks are the prop to replace. Both are sent
+ * as positive points so the replace mask covers the chosen person and the
+ * chosen prop. neg_coordinates stays a dummy point because the hub workflow
+ * always expects that field. It is not a "keep this prop" mark.
  */
 
 export function normalizePoints(raw) {
@@ -35,24 +38,18 @@ export function scalePoints(points, fromWidth, fromHeight, toWidth, toHeight) {
 
 /**
  * Build the three fields the Wan Animate Runpod handler expects.
- * Returns {} when there is no positive point (caller should error).
+ * Returns {} when there is no person point (caller should error).
+ * Prop points are appended to the positive set.
  */
 export function buildMaskPointFields(fields = {}) {
-  let positive = normalizePoints(fields.positive_points);
-  let negative = normalizePoints(fields.negative_points);
+  let person = normalizePoints(fields.positive_points);
+  let prop = normalizePoints(fields.prop_points);
 
-  if (!positive.length && typeof fields.coordinates === "string") {
+  if (!person.length && typeof fields.coordinates === "string") {
     try {
-      positive = normalizePoints(JSON.parse(fields.coordinates));
+      person = normalizePoints(JSON.parse(fields.coordinates));
     } catch {
-      positive = [];
-    }
-  }
-  if (!negative.length && typeof fields.neg_coordinates === "string") {
-    try {
-      negative = normalizePoints(JSON.parse(fields.neg_coordinates));
-    } catch {
-      negative = [];
+      person = [];
     }
   }
 
@@ -61,14 +58,16 @@ export function buildMaskPointFields(fields = {}) {
   const toW = Number(fields.width);
   const toH = Number(fields.height);
   if (fromW > 0 && fromH > 0 && toW > 0 && toH > 0) {
-    positive = scalePoints(positive, fromW, fromH, toW, toH);
-    negative = scalePoints(negative, fromW, fromH, toW, toH);
+    person = scalePoints(person, fromW, fromH, toW, toH);
+    prop = scalePoints(prop, fromW, fromH, toW, toH);
   }
 
-  if (!positive.length) return {};
+  if (!person.length) return {};
 
-  // Hub examples always send at least one negative slot.
-  const neg = negative.length ? negative : [{ x: 0, y: 0 }];
+  const positive = person.concat(prop);
+  // Hub examples always send at least one negative slot. SAM does not use it
+  // as a region to keep, and Mix does not put prop marks here.
+  const neg = [{ x: 0, y: 0 }];
   return {
     points_store: JSON.stringify({ positive, negative: neg }),
     coordinates: JSON.stringify(positive),
@@ -77,7 +76,35 @@ export function buildMaskPointFields(fields = {}) {
 }
 
 export const MIX_DEFAULT_PROMPT =
-  "the person in the reference photo, replace only that person, keep every handheld object prop food drink popsicle stick utensil and item from the template video unchanged and real, natural motion, cinematic";
+  "replace the marked person with the person in the reference photo, natural motion, cinematic";
+
+export const MIX_PROP_PROMPT =
+  "replace the marked person with the person in the reference photo, and replace the marked handheld prop with the object in the corner of the reference photo, natural motion, cinematic";
+
+export const LEGACY_KEEP_PROMPTS = [
+  "the person in the reference photo, replace only that person, keep every handheld object from the template unchanged and real",
+  "the person in the reference photo, replace only that person, keep every handheld object prop food drink popsicle stick utensil and item from the template video unchanged and real, natural motion, cinematic",
+];
+
+export function mixPrompt(userPrompt, hasProp) {
+  const trimmed = String(userPrompt || "").trim();
+  const bare =
+    !trimmed ||
+    LEGACY_KEEP_PROMPTS.includes(trimmed) ||
+    trimmed === MIX_DEFAULT_PROMPT ||
+    trimmed === MIX_PROP_PROMPT;
+  if (hasProp) {
+    if (bare) return MIX_PROP_PROMPT;
+    if (/marked handheld prop|object in the corner of the reference photo/i.test(trimmed)) return trimmed;
+    return `${MIX_PROP_PROMPT}. ${trimmed}`;
+  }
+  if (bare) return MIX_DEFAULT_PROMPT;
+  if (/keep every handheld|props to keep|objects to keep/i.test(trimmed)) {
+    return `${MIX_DEFAULT_PROMPT}. ${trimmed}`;
+  }
+  if (/replace the marked person|person in the reference photo/i.test(trimmed)) return trimmed;
+  return `${MIX_DEFAULT_PROMPT}. ${trimmed}`;
+}
 
 export const MIX_DEFAULT_NEGATIVE =
   "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 风格, 作品, 画作, 画面, 静止, 整体发灰, 最差质量, 低质量, JPEG压缩残留, 丑陋的, 残缺的, 多余的手指, 画得不好的手部, 画得不好的脸部, 畸形的, 毁容的, 形态畸形的肢体, 手指融合, 静止不动的画面, 杂乱的背景, 三条腿, 背景人很多, 倒着走";

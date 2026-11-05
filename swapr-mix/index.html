@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0b0f" />
-    <title>Swapr Mix — keep the props</title>
+    <title>Swapr Mix — replace a person and props</title>
     <link rel="stylesheet" href="/src/styles.css" />
     <script src="/config.js"></script>
   </head>
@@ -12,8 +12,8 @@
     <div id="app">
       <header class="top">
         <p class="product-badge">Swapr Mix</p>
-        <h1>Keep the props</h1>
-        <p class="sub">Pick a motion, mark the person and any object to keep, then upload your still. Original Swapr stays unchanged.</p>
+        <h1>Replace person &amp; props</h1>
+        <p class="sub">Pick a motion, mark who and what to replace, then upload a still for each. Original Swapr stays unchanged.</p>
         <button type="button" id="btn-howto" class="howto-launch" aria-haspopup="dialog" aria-controls="howto-dialog">
           How Mix works
         </button>
@@ -43,11 +43,11 @@
       <section class="section is-locked" id="mask-section" hidden aria-disabled="true">
         <h2>Mark person &amp; props</h2>
         <p class="muted" id="mask-hint">
-          Green = person to replace. Red = objects to keep from the template (popsicle, cup, phone…).
+          Green = person to replace. Red = prop to replace (popsicle, cup, phone…).
         </p>
         <div class="mask-tools" role="group" aria-label="Mark mode">
           <button type="button" id="mask-mode-person" class="mask-mode active" aria-pressed="true">Mark person</button>
-          <button type="button" id="mask-mode-prop" class="mask-mode" aria-pressed="false">Mark keep</button>
+          <button type="button" id="mask-mode-prop" class="mask-mode" aria-pressed="false">Mark prop</button>
           <button type="button" id="mask-clear" class="ghost">Clear marks</button>
         </div>
         <div class="mask-stage">
@@ -57,26 +57,46 @@
       </section>
 
       <section class="section is-locked" id="upload-section" tabindex="-1" aria-disabled="true">
-        <h2>Your photo</h2>
-        <p id="upload-hint" class="muted">Pick a motion above to unlock this step.</p>
-        <label class="upload-zone" id="upload-zone">
-          <input type="file" id="photo-input" accept="image/*" hidden disabled />
-          <div class="upload-inner" id="upload-inner">
-            <div class="upload-icon" aria-hidden="true">⬆</div>
-            <strong>Tap to upload a still of yourself</strong>
-            <span class="muted">JPG / PNG · face or full body works best</span>
+        <h2>Replacement stills</h2>
+        <p id="upload-hint" class="muted">Pick a motion above to unlock replacement stills.</p>
+        <div class="upload-pair">
+          <div class="upload-block">
+            <h3 class="dot-green">Green dot · person</h3>
+            <p class="muted">Upload the face or body that should replace every person you marked in green.</p>
+            <label class="upload-zone person-zone" id="upload-zone">
+              <input type="file" id="photo-input" accept="image/*" multiple hidden disabled />
+              <div class="upload-inner" id="upload-inner">
+                <div class="upload-icon" aria-hidden="true">⬆</div>
+                <strong>Upload person replacement</strong>
+                <span class="muted">One or more stills · JPG / PNG</span>
+              </div>
+              <div id="person-previews" class="preview-row" hidden></div>
+            </label>
           </div>
-          <img id="photo-preview" alt="" hidden />
-        </label>
+          <div class="upload-block">
+            <h3 class="dot-red">Red dot · prop</h3>
+            <p class="muted">Upload the object that should replace the prop you marked in red.</p>
+            <label class="upload-zone prop-zone" id="prop-upload-zone">
+              <input type="file" id="prop-input" accept="image/*" multiple hidden disabled />
+              <div class="upload-inner" id="prop-upload-inner">
+                <div class="upload-icon" aria-hidden="true">⬆</div>
+                <strong>Upload prop replacement</strong>
+                <span class="muted">One or more stills · popsicle, cup, phone…</span>
+              </div>
+              <div id="prop-previews" class="preview-row" hidden></div>
+            </label>
+          </div>
+        </div>
       </section>
 
       <section class="section">
         <h2>Prompt <span class="muted">(optional)</span></h2>
-        <textarea id="prompt" rows="3" placeholder="keep the popsicle, replace only the person…">the person in the reference photo, replace only that person, keep every handheld object from the template unchanged and real</textarea>
+        <textarea id="prompt" rows="3" placeholder="replace the marked person and the marked prop…">replace the marked person with the person in the reference photo, and replace the marked handheld prop with the object in the corner of the reference photo, natural motion, cinematic</textarea>
       </section>
 
       <section class="section actions">
         <button type="button" id="btn-generate" class="primary" disabled>Generate Mix</button>
+        <p id="gate-hint" class="muted" aria-live="polite"></p>
         <p class="muted">Uses Wan Animate replace with your SAM marks on Runpod. The first Generate may take several minutes while the worker starts. Leave this tab open.</p>
         <p id="gen-status" class="muted" aria-live="polite"></p>
       </section>
@@ -112,7 +132,7 @@
       </section>
 
       <footer class="foot muted">
-        Swapr Mix · person-mask replace · original Swapr left as-is
+        Swapr Mix · replace person and props · original Swapr left as-is
       </footer>
     </div>
 
@@ -125,16 +145,16 @@
       <h3>Why this exists</h3>
       <p>
         Original <strong>Swapr</strong> (Become the Character) is unchanged.
-        Mix is a separate app that sends <strong>SAM control points</strong> so Wan Animate
-        replaces the person and can leave handheld props alone when you mark them.
+        Mix is a separate app that sends <strong>SAM control points</strong> so you can choose
+        which person and which prop Wan Animate replaces.
       </p>
 
       <h3>Use Mix</h3>
       <ol>
         <li><strong>Pick a motion</strong> from the gallery.</li>
-        <li><strong>Mark person</strong> — tap green on the body/face to replace.</li>
-        <li><strong>Mark keep</strong> — tap red on props (popsicle, cup, phone) that must stay from the template.</li>
-        <li><strong>Upload your still</strong> of the person (a still that includes the prop helps even more).</li>
+        <li><strong>Mark person</strong> — tap green on each person to replace.</li>
+        <li><strong>Mark prop</strong> — tap red on each prop to replace (popsicle, cup, phone).</li>
+        <li><strong>Upload stills</strong> — a person image for the green dots, and a prop image for the red dots.</li>
         <li>Tap <strong>Generate Mix</strong>. Leave the tab open while Runpod runs.</li>
       </ol>
 

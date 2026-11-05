@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  LEGACY_KEEP_PROMPTS,
   MIX_DEFAULT_NEGATIVE,
   MIX_DEFAULT_PROMPT,
+  MIX_PROP_PROMPT,
   buildMaskPointFields,
+  mixPrompt,
   normalizePoints,
   scalePoints,
 } from "../server/mixPoints.js";
@@ -34,30 +37,43 @@ describe("mixPoints", () => {
     assert.deepEqual(buildMaskPointFields({ positive_points: [], negative_points: [{ x: 1, y: 1 }] }), {});
   });
 
-  it("builds hub points_store / coordinates / neg_coordinates", () => {
+  it("puts person and prop marks in the positive SAM set", () => {
     const fields = buildMaskPointFields({
       positive_points: [{ x: 50, y: 80 }],
-      negative_points: [{ x: 120, y: 90 }],
+      prop_points: [{ x: 120, y: 90 }],
+      negative_points: [{ x: 5, y: 5 }],
       frame_width: 100,
       frame_height: 100,
       width: 200,
       height: 200,
     });
     assert.ok(fields.points_store);
-    assert.deepEqual(JSON.parse(fields.coordinates), [{ x: 100, y: 160 }]);
-    assert.deepEqual(JSON.parse(fields.neg_coordinates), [{ x: 240, y: 180 }]);
+    assert.deepEqual(JSON.parse(fields.coordinates), [
+      { x: 100, y: 160 },
+      { x: 240, y: 180 },
+    ]);
+    assert.deepEqual(JSON.parse(fields.neg_coordinates), [{ x: 0, y: 0 }]);
     const store = JSON.parse(fields.points_store);
-    assert.equal(store.positive.length, 1);
+    assert.equal(store.positive.length, 2);
     assert.equal(store.negative.length, 1);
+    assert.deepEqual(store.negative, [{ x: 0, y: 0 }]);
   });
 
-  it("adds a dummy negative point when none are marked", () => {
+  it("adds a dummy negative point when no prop is marked", () => {
     const fields = buildMaskPointFields({ positive_points: [{ x: 1, y: 2 }] });
     assert.deepEqual(JSON.parse(fields.neg_coordinates), [{ x: 0, y: 0 }]);
+    assert.equal(JSON.parse(fields.coordinates).length, 1);
   });
 
-  it("exports Mix prompt defaults that mention props", () => {
-    assert.match(MIX_DEFAULT_PROMPT, /handheld object|prop/i);
+  it("exports replace-person and replace-prop prompts", () => {
+    assert.match(MIX_DEFAULT_PROMPT, /marked person/i);
+    assert.doesNotMatch(MIX_DEFAULT_PROMPT, /keep every handheld|props to keep/i);
+    assert.match(MIX_PROP_PROMPT, /marked handheld prop/i);
+    assert.match(MIX_PROP_PROMPT, /corner of the reference photo/i);
     assert.match(MIX_DEFAULT_NEGATIVE, /最差质量|畸形的/);
+    assert.equal(mixPrompt(LEGACY_KEEP_PROMPTS[0], false), MIX_DEFAULT_PROMPT);
+    assert.equal(mixPrompt(MIX_PROP_PROMPT, false), MIX_DEFAULT_PROMPT);
+    assert.equal(mixPrompt(MIX_DEFAULT_PROMPT, true), MIX_PROP_PROMPT);
+    assert.match(mixPrompt("a person", true), /marked handheld prop/);
   });
 });

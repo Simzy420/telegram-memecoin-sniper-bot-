@@ -1,13 +1,16 @@
 /**
- * Swapr Mix — person-mask replace UI (fork of Become the Character / Swapr).
+ * Swapr Mix — replace a marked person and marked props (fork of Swapr).
  * Original Swapr remains on wan22-templates main / production hosts.
  *
  * Templates from HF dataset CDN. Generate goes through same-origin
- * /api/generate when USE_PROXY is true (required on iPhone), and always
- * includes SAM positive/negative points for the Runpod point workflow.
+ * /api/generate when USE_PROXY is true (required on iPhone). Green points
+ * and the person still replace a person. Red points and the prop still
+ * replace a prop. The server composites both stills into the one reference
+ * image Runpod accepts.
  */
 import { inject } from '@vercel/analytics';
 import { generateFailureText, publicErrorText } from "../server/gatewayError.js";
+import { MIX_DEFAULT_PROMPT, MIX_PROP_PROMPT, LEGACY_KEEP_PROMPTS } from "../server/mixPoints.js";
 import { rewriteSpaceVideoUrl } from "../server/videoUrl.js";
 
 // Initialize Vercel Web Analytics
@@ -29,8 +32,9 @@ const EXTEND_WAIT = "Extend uses the Hugging Face Space and can take several min
 
 let templates = [];
 let selectedId = null;
-let photoFile = null;
-let photoBlobUrl = null;
+let personFiles = [];
+let propFiles = [];
+const previewUrls = { person: [], prop: [] };
 let lastResultUrl = null;
 /** Session id returned by Space /generate for /extend API calls. */
 let sessionId = "";
@@ -38,9 +42,9 @@ let sessionId = "";
 let currentRunpodJob = "";
 let lastResultBlob = null;
 
-/** SAM marks in natural video-frame pixels. */
+/** SAM marks in natural video-frame pixels. Green = person, red = prop. */
 let positivePoints = [];
-let negativePoints = [];
+let propPoints = [];
 let maskMode = "person";
 let frameNatural = { width: 0, height: 0 };
 let frameBitmap = null;
@@ -64,8 +68,13 @@ const els = {
   uploadZone: document.getElementById("upload-zone"),
   uploadInner: document.getElementById("upload-inner"),
   photoInput: document.getElementById("photo-input"),
-  photoPreview: document.getElementById("photo-preview"),
+  personPreviews: document.getElementById("person-previews"),
+  propZone: document.getElementById("prop-upload-zone"),
+  propInner: document.getElementById("prop-upload-inner"),
+  propInput: document.getElementById("prop-input"),
+  propPreviews: document.getElementById("prop-previews"),
   prompt: document.getElementById("prompt"),
+  gateHint: document.getElementById("gate-hint"),
   btnGen: document.getElementById("btn-generate"),
   genStatus: document.getElementById("gen-status"),
   resultPanel: document.getElementById("result-panel"),
@@ -136,8 +145,20 @@ function workerSize(size) {
   return { width: 640, height: 640 };
 }
 
+function generateBlockReason() {
+  if (!selectedId) return "Pick a motion first.";
+  if (!positivePoints.length) return "Tap the person to replace (green).";
+  if (!personFiles.length) return "Upload a replacement image for the green-dot person.";
+  if (propPoints.length && !propFiles.length) return "Upload a replacement image for the red-dot prop.";
+  if (propFiles.length && !propPoints.length) return "Tap the prop to replace (red).";
+  return "";
+}
+
 function updateGenerateEnabled() {
-  els.btnGen.disabled = !(selectedId && photoFile && positivePoints.length > 0);
+  const reason = generateBlockReason();
+  els.btnGen.disabled = Boolean(reason);
+  els.btnGen.title = reason;
+  if (els.gateHint) els.gateHint.textContent = selectedId ? reason : "";
 }
 
 function setMaskMode(mode) {
@@ -151,12 +172,12 @@ function setMaskMode(mode) {
 function updateMaskStatus() {
   if (!els.maskStatus) return;
   const p = positivePoints.length;
-  const n = negativePoints.length;
+  const n = propPoints.length;
   if (!p && !n) {
-    els.maskStatus.textContent = "No marks yet. Tap the person (green), then props to keep (red).";
+    els.maskStatus.textContent = "No marks yet. Tap the person to replace (green), then the prop to replace (red).";
     return;
   }
-  els.maskStatus.textContent = `${p} person mark${p === 1 ? "" : "s"} · ${n} keep mark${n === 1 ? "" : "s"}`;
+  els.maskStatus.textContent = `${p} person mark${p === 1 ? "" : "s"} · ${n} prop mark${n === 1 ? "" : "s"}`;
 }
 
 function drawMaskCanvas() {
@@ -181,7 +202,7 @@ function drawMaskCanvas() {
     ctx.fill();
     ctx.stroke();
   }
-  for (const pt of negativePoints) {
+  for (const pt of propPoints) {
     ctx.beginPath();
     ctx.fillStyle = "rgba(248, 113, 113, 0.95)";
     ctx.strokeStyle = "#450a0a";
@@ -194,7 +215,7 @@ function drawMaskCanvas() {
 
 function clearMaskPoints() {
   positivePoints = [];
-  negativePoints = [];
+  propPoints = [];
   updateMaskStatus();
   drawMaskCanvas();
   updateGenerateEnabled();
@@ -270,7 +291,7 @@ function onMaskPointer(event) {
   event.preventDefault();
   const pt = canvasToNatural(event);
   if (!pt) return;
-  if (maskMode === "prop") negativePoints.push(pt);
+  if (maskMode === "prop") propPoints.push(pt);
   else positivePoints.push(pt);
   updateMaskStatus();
   drawMaskCanvas();
@@ -331,7 +352,8 @@ function lockUpload() {
   els.uploadSection.classList.remove("is-ready");
   els.uploadSection.setAttribute("aria-disabled", "true");
   els.photoInput.disabled = true;
-  els.uploadHint.textContent = "Pick a motion above to unlock this step.";
+  if (els.propInput) els.propInput.disabled = true;
+  els.uploadHint.textContent = "Pick a motion above to unlock replacement stills.";
   els.selectedPanel.hidden = true;
 }
 
@@ -340,7 +362,8 @@ function focusUpload() {
   els.uploadSection.classList.add("is-ready");
   els.uploadSection.setAttribute("aria-disabled", "false");
   els.photoInput.disabled = false;
-  els.uploadHint.textContent = "Upload a still of the person who should do this motion.";
+  if (els.propInput) els.propInput.disabled = false;
+  els.uploadHint.textContent = "Upload a still for the green-dot person, and a still for the red-dot prop.";
   els.uploadSection.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
   els.uploadSection.focus({ preventScroll: true });
 }
@@ -441,35 +464,72 @@ function selectTemplate(id, opts = {}) {
   }
 }
 
-function setPhoto(file) {
-  if (!selectedId || els.photoInput.disabled) return;
-  if (!file || !file.type.startsWith("image/")) return;
-  photoFile = file;
-  if (photoBlobUrl) URL.revokeObjectURL(photoBlobUrl);
-  photoBlobUrl = URL.createObjectURL(file);
-  els.photoPreview.src = photoBlobUrl;
-  els.photoPreview.hidden = false;
-  els.uploadInner.hidden = true;
+function imageFiles(fileList) {
+  return [...(fileList || [])].filter((file) => file && String(file.type || "").startsWith("image/"));
+}
+
+function revokePreviews(kind) {
+  for (const url of previewUrls[kind]) URL.revokeObjectURL(url);
+  previewUrls[kind] = [];
+}
+
+function renderPreviews(kind) {
+  const files = kind === "prop" ? propFiles : personFiles;
+  const host = kind === "prop" ? els.propPreviews : els.personPreviews;
+  const inner = kind === "prop" ? els.propInner : els.uploadInner;
+  if (!host) return;
+  revokePreviews(kind);
+  host.replaceChildren();
+  if (!files.length) {
+    host.hidden = true;
+    if (inner) inner.hidden = false;
+    return;
+  }
+  if (inner) inner.hidden = true;
+  host.hidden = false;
+  for (const file of files) {
+    const url = URL.createObjectURL(file);
+    previewUrls[kind].push(url);
+    const img = document.createElement("img");
+    img.src = url;
+    img.alt = kind === "prop" ? "Prop replacement preview" : "Person replacement preview";
+    host.appendChild(img);
+  }
+}
+
+function setStills(kind, fileList) {
+  const input = kind === "prop" ? els.propInput : els.photoInput;
+  if (!selectedId || !input || input.disabled) return;
+  const files = imageFiles(fileList);
+  if (!files.length) return;
+  if (kind === "prop") propFiles = files;
+  else personFiles = files;
+  renderPreviews(kind);
   updateGenerateEnabled();
 }
 
-els.photoInput.addEventListener("change", () => {
-  const f = els.photoInput.files && els.photoInput.files[0];
-  if (f) setPhoto(f);
-});
-els.uploadZone.addEventListener("dragover", (e) => {
-  if (!selectedId) return;
-  e.preventDefault();
-  els.uploadZone.classList.add("drag");
-});
-els.uploadZone.addEventListener("dragleave", () => els.uploadZone.classList.remove("drag"));
-els.uploadZone.addEventListener("drop", (e) => {
-  if (!selectedId) return;
-  e.preventDefault();
-  els.uploadZone.classList.remove("drag");
-  const f = e.dataTransfer.files && e.dataTransfer.files[0];
-  if (f) setPhoto(f);
-});
+function bindStillInput(input, zone, kind) {
+  if (!input) return;
+  input.addEventListener("change", () => {
+    if (input.files && input.files.length) setStills(kind, input.files);
+  });
+  if (!zone) return;
+  zone.addEventListener("dragover", (e) => {
+    if (!selectedId) return;
+    e.preventDefault();
+    zone.classList.add("drag");
+  });
+  zone.addEventListener("dragleave", () => zone.classList.remove("drag"));
+  zone.addEventListener("drop", (e) => {
+    if (!selectedId) return;
+    e.preventDefault();
+    zone.classList.remove("drag");
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) setStills(kind, e.dataTransfer.files);
+  });
+}
+
+bindStillInput(els.photoInput, els.uploadZone, "person");
+bindStillInput(els.propInput, els.propZone, "prop");
 
 els.refresh.addEventListener("click", () => loadCatalog());
 window.addEventListener("scroll", syncPlayback, { passive: true });
@@ -570,25 +630,58 @@ function rememberSession(data) {
   if (sid) sessionId = String(sid);
 }
 
+function closeBitmaps(bitmaps) {
+  for (const bitmap of bitmaps) {
+    if (bitmap && typeof bitmap.close === "function") bitmap.close();
+  }
+}
+
+async function canvasToJpeg(canvas, name) {
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+  if (!blob) return null;
+  return new File([blob], name, { type: "image/jpeg" });
+}
+
+function drawContained(ctx, bitmap, x, y, w, h) {
+  const scale = Math.min(w / bitmap.width, h / bitmap.height);
+  const dw = Math.max(1, Math.round(bitmap.width * scale));
+  const dh = Math.max(1, Math.round(bitmap.height * scale));
+  ctx.drawImage(bitmap, x + Math.round((w - dw) / 2), y + Math.round((h - dh) / 2), dw, dh);
+}
+
 /**
- * Phone stills (including HEIC) are re-encoded to JPEG under the body limit.
- * The still is letterboxed (padded, never cropped) to the motion clip's
- * aspect so the whole subject, head included, reaches the worker.
+ * Phone stills (including HEIC) are re-encoded to JPEG.
+ * Person stills are letterboxed (padded, never cropped) to the motion clip's
+ * aspect. Several person stills sit side by side in that frame.
  */
-async function photoForUpload(file, target) {
-  if (!file) return file;
+async function personStillForUpload(files, target) {
+  const list = (files || []).filter(Boolean);
+  if (!list.length) return null;
+  let bitmaps = [];
   try {
-    const bitmap = await createImageBitmap(file);
-    const aspect = target ? target.width / target.height : bitmap.width / bitmap.height;
+    bitmaps = await Promise.all(list.map((file) => createImageBitmap(file)));
+    const aspect = target ? target.width / target.height : bitmaps[0].width / bitmaps[0].height;
     const maxEdge = 1280;
     let cw;
     let ch;
-    if (bitmap.width / bitmap.height > aspect) {
-      cw = bitmap.width;
-      ch = Math.round(bitmap.width / aspect);
+    if (bitmaps.length === 1) {
+      const bitmap = bitmaps[0];
+      if (bitmap.width / bitmap.height > aspect) {
+        cw = bitmap.width;
+        ch = Math.round(bitmap.width / aspect);
+      } else {
+        ch = bitmap.height;
+        cw = Math.round(bitmap.height * aspect);
+      }
     } else {
-      ch = bitmap.height;
-      cw = Math.round(bitmap.height * aspect);
+      const cellW = Math.max(...bitmaps.map((bitmap) => bitmap.width));
+      const cellH = Math.max(...bitmaps.map((bitmap) => bitmap.height));
+      cw = cellW * bitmaps.length;
+      ch = Math.round(cw / aspect);
+      if (ch < cellH) {
+        ch = cellH;
+        cw = Math.round(ch * aspect);
+      }
     }
     const scale = Math.min(1, maxEdge / Math.max(cw, ch));
     const width = Math.max(1, Math.round(cw * scale));
@@ -599,15 +692,89 @@ async function photoForUpload(file, target) {
     const ctx = canvas.getContext("2d");
     ctx.fillStyle = "#000";
     ctx.fillRect(0, 0, width, height);
-    const dw = Math.round(bitmap.width * scale);
-    const dh = Math.round(bitmap.height * scale);
-    ctx.drawImage(bitmap, Math.round((width - dw) / 2), Math.round((height - dh) / 2), dw, dh);
-    if (typeof bitmap.close === "function") bitmap.close();
-    const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
-    if (!blob) return file;
-    return new File([blob], "photo.jpg", { type: "image/jpeg" });
+    const cellW = width / bitmaps.length;
+    bitmaps.forEach((bitmap, index) => drawContained(ctx, bitmap, cellW * index, 0, cellW, height));
+    return (await canvasToJpeg(canvas, "person.jpg")) || list[0];
   } catch {
-    return file;
+    return list[0];
+  } finally {
+    closeBitmaps(bitmaps);
+  }
+}
+
+/** Prop stills stay in their own frame, side by side when there is more than one. */
+async function propStillForUpload(files) {
+  const list = (files || []).filter(Boolean);
+  if (!list.length) return null;
+  let bitmaps = [];
+  try {
+    bitmaps = await Promise.all(list.map((file) => createImageBitmap(file)));
+    const maxH = 720;
+    const scaled = bitmaps.map((bitmap) => {
+      const fit = Math.min(1, maxH / bitmap.height, 1280 / bitmap.width);
+      return {
+        bitmap,
+        w: Math.max(1, Math.round(bitmap.width * fit)),
+        h: Math.max(1, Math.round(bitmap.height * fit)),
+      };
+    });
+    let width = scaled.reduce((sum, item) => sum + item.w, 0);
+    let height = Math.max(...scaled.map((item) => item.h));
+    const down = Math.min(1, 1280 / width, 1280 / height);
+    width = Math.max(1, Math.round(width * down));
+    height = Math.max(1, Math.round(height * down));
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#000";
+    ctx.fillRect(0, 0, width, height);
+    let x = 0;
+    for (const item of scaled) {
+      const w = Math.max(1, Math.round(item.w * down));
+      const h = Math.max(1, Math.round(item.h * down));
+      ctx.drawImage(item.bitmap, x, Math.round((height - h) / 2), w, h);
+      x += w;
+    }
+    return (await canvasToJpeg(canvas, "prop.jpg")) || list[0];
+  } catch {
+    return list[0];
+  } finally {
+    closeBitmaps(bitmaps);
+  }
+}
+
+/** Non-proxy fallback: the Space only accepts one image, so inset the prop here too. */
+async function insetPropFile(personFile, propFile) {
+  if (!personFile || !propFile) return personFile;
+  let person = null;
+  let prop = null;
+  try {
+    person = await createImageBitmap(personFile);
+    prop = await createImageBitmap(propFile);
+    const canvas = document.createElement("canvas");
+    canvas.width = person.width;
+    canvas.height = person.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(person, 0, 0);
+    const margin = Math.max(4, Math.round(person.width * 0.04));
+    const border = 3;
+    const maxW = Math.max(1, Math.round(person.width * 0.34) - border * 2);
+    const maxH = Math.max(1, Math.round(person.height * 0.28) - border * 2);
+    const scale = Math.min(maxW / prop.width, maxH / prop.height);
+    const dw = Math.max(1, Math.round(prop.width * scale));
+    const dh = Math.max(1, Math.round(prop.height * scale));
+    const x = person.width - margin - border - dw;
+    const y = person.height - margin - border - dh;
+    ctx.fillStyle = "#fff";
+    ctx.fillRect(x - border, y - border, dw + border * 2, dh + border * 2);
+    ctx.drawImage(prop, x, y, dw, dh);
+    return (await canvasToJpeg(canvas, "reference.jpg")) || personFile;
+  } catch {
+    return personFile;
+  } finally {
+    if (person && typeof person.close === "function") person.close();
+    if (prop && typeof prop.close === "function") prop.close();
   }
 }
 
@@ -617,9 +784,7 @@ function generateArgs(size) {
   return {
     template_id: selectedId,
     video_url: selected ? videoUrl(selected) : "",
-    prompt:
-      els.prompt.value.trim() ||
-      "the person in the reference photo, replace only that person, keep every handheld object from the template unchanged and real",
+    prompt: els.prompt.value.trim() || (propPoints.length ? MIX_PROP_PROMPT : MIX_DEFAULT_PROMPT),
     template_width: size ? size.width : undefined,
     template_height: size ? size.height : undefined,
     frame_width: frameNatural.width || undefined,
@@ -636,7 +801,7 @@ function generateArgs(size) {
     seed: Math.floor(Math.random() * 1_000_000_000),
     mode: "replace",
     positive_points: positivePoints,
-    negative_points: negativePoints,
+    prop_points: propPoints,
     session_id: sessionId || "",
   };
 }
@@ -704,8 +869,11 @@ async function callSpace(apiName, payload) {
   form.append("api", apiName);
   form.append("payload", JSON.stringify(payload.json || {}));
   if (payload.photo) {
-    const photo = await photoForUpload(payload.photo, payload.target);
-    form.append("photo", photo, photo.name || "photo.jpg");
+    const photo = payload.prepared ? payload.photo : await personStillForUpload([payload.photo], payload.target);
+    if (photo) form.append("photo", photo, photo.name || "person.jpg");
+  }
+  if (payload.propPhoto) {
+    form.append("prop_photo", payload.propPhoto, payload.propPhoto.name || "prop.jpg");
   }
   const res = await fetch("/api/generate", { method: "POST", body: form });
   const text = await res.text();
@@ -739,30 +907,36 @@ els.maskCanvas?.addEventListener("pointerdown", onMaskPointer);
 window.addEventListener("resize", () => drawMaskCanvas());
 
 els.btnGen.addEventListener("click", async () => {
-  if (!selectedId || !photoFile) return;
-  if (!positivePoints.length) {
-    els.genStatus.textContent = "Tap the person on the template frame (green) before Generate.";
+  const blocked = generateBlockReason();
+  if (blocked) {
+    if (els.gateHint) els.gateHint.textContent = blocked;
     return;
-  }
-  if (!negativePoints.length) {
-    const ok = window.confirm(
-      "You did not mark any prop to keep (red). Props may still vanish. Continue anyway?",
-    );
-    if (!ok) return;
   }
   setBusy(`Queuing Mix on Runpod… ${GENERATE_WAIT}`);
   try {
     const size = await templateSize(templates.find((t) => t.id === selectedId));
+    const target = workerSize(size);
+    const personStill = await personStillForUpload(personFiles, target);
+    const propStill = propFiles.length ? await propStillForUpload(propFiles) : null;
+    if (!personStill) throw new Error("Could not read the person still.");
+    if (propFiles.length && !propStill) throw new Error("Could not read the prop still.");
     const args = generateArgs(size);
     if (USE_PROXY) {
-      const data = await callSpace("/generate", { json: args, photo: photoFile, target: workerSize(size) });
+      const data = await callSpace("/generate", {
+        json: args,
+        photo: personStill,
+        propPhoto: propStill,
+        prepared: true,
+        target,
+      });
       rememberSession(data);
       showResult(data.video || data.url);
       els.genStatus.textContent = statusText(data.status, "Done.");
     } else {
       const { Client } = await import("@gradio/client");
       const client = await Client.connect(SPACE);
-      const result = await client.predict("/generate", { ...args, image: photoFile });
+      const image = await insetPropFile(personStill, propStill);
+      const result = await client.predict("/generate", { ...args, image });
       // result.data: [video, download, status, last_frame, session_id]
       const data = result?.data || result;
       const video = Array.isArray(data) ? data[0] : data;
@@ -858,6 +1032,11 @@ els.btnStop?.addEventListener("click", async () => {
   }
 });
 
+if (els.prompt) {
+  const current = els.prompt.value.trim();
+  if (!current || LEGACY_KEEP_PROMPTS.includes(current)) els.prompt.value = MIX_PROP_PROMPT;
+}
 refreshBalance();
 setInterval(refreshBalance, 30000);
+updateGenerateEnabled();
 loadCatalog();

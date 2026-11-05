@@ -1,4 +1,4 @@
-# Swapr Mix — keep the props
+# Swapr Mix — replace a person and props
 
 **Fork of** [Simzy420/wan22-templates](https://github.com/Simzy420/wan22-templates) (**Swapr / Become the Character**).
 
@@ -7,19 +7,20 @@ This branch is a **separate product**. Do **not** deploy it onto the original Sw
 | App | Host | Status |
 | --- | --- | --- |
 | **Original Swapr** | https://wan22-templates.vercel.app · https://swapr-casey.netlify.app | Leave alone (`main`) |
-| **Swapr Mix** (this) | Deploy a **new** Vercel or Netlify site from branch `cursor/swapr-mix-bb0e` | Person-mask replace |
+| **Swapr Mix** (this) | https://swapr-mix.vercel.app/ from branch `cursor/swapr-mix-bb0e` | Replace a marked person and marked props |
 
 ## What Mix changes
 
-Original Swapr sends Wan Animate `mode: replace` **without** SAM control points, so the worker’s auto mask often eats handheld props (popsicle → missing / rubber).
+Original Swapr sends Wan Animate `mode: replace` **without** SAM control points, so you cannot choose which person or which handheld prop is replaced.
 
 Swapr Mix:
 
 1. Shows the template’s first frame.
-2. You tap **green** on the person to replace.
-3. You tap **red** on props to keep.
-4. Generate sends `points_store` / `coordinates` / `neg_coordinates` so Runpod loads `newWanAnimate_point_api.json` (SAM guided by your marks).
-5. Slightly stronger Mix defaults (steps 5, cfg 1, prop-aware prompt, standard Wan negative).
+2. You tap **green** on each person to replace, then upload one or more person stills.
+3. You tap **red** on each prop to replace (popsicle, cup, phone), then upload one or more prop stills.
+4. Generate sends `points_store` / `coordinates` / `neg_coordinates` so Runpod loads `newWanAnimate_point_api.json`. Green and red marks are both **positive** SAM points (the regions to replace). The hub still requires a dummy `neg_coordinates` point; that point does not mean “keep.”
+5. The Runpod handler accepts one reference image. Mix composites the prop still into the corner of the person still and sends that JPEG as `image_base64`, and also sends the prop still as `prop_image_base64`.
+6. Slightly stronger Mix defaults (steps 5, cfg 1, replace-person / replace-prop prompt, standard Wan negative).
 
 Same Runpod endpoint and template catalog as Swapr. Same phone proxy pattern (`USE_PROXY: true`).
 
