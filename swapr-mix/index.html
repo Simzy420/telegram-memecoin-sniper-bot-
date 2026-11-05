@@ -15,7 +15,8 @@
         <h1>Keep the props</h1>
         <p class="sub">Pick a motion, mark the person and any object to keep, then upload your still. Original Swapr stays unchanged.</p>
         <button type="button" id="btn-howto" class="howto-launch" aria-haspopup="dialog" aria-controls="howto-dialog">
-          How Mix works
+          <span class="howto-launch-mark" aria-hidden="true">?</span>
+          How to Use
         </button>
       </header>
 
@@ -118,29 +119,50 @@
 
     <dialog id="howto-dialog" class="howto" aria-labelledby="howto-title">
       <div class="howto-bar">
-        <h2 id="howto-title">How Mix works</h2>
-        <button type="button" id="btn-howto-close" class="ghost">Close</button>
+        <h2 id="howto-title">How to Use</h2>
+        <button type="button" id="btn-howto-close" class="howto-close">Close</button>
       </div>
 
-      <h3>Why this exists</h3>
       <p>
-        Original <strong>Swapr</strong> (Become the Character) is unchanged.
-        Mix is a separate app that sends <strong>SAM control points</strong> so Wan Animate
-        replaces the person and can leave handheld props alone when you mark them.
+        Use Swapr Mix for ordinary motions such as <strong>dancing</strong> or <strong>walking</strong>.
+        Mark a <strong>cup</strong> or a <strong>phone</strong> when that object should stay in the clip.
       </p>
 
-      <h3>Use Mix</h3>
+      <h3>How Mix works</h3>
       <ol>
-        <li><strong>Pick a motion</strong> from the gallery.</li>
-        <li><strong>Mark person</strong> — tap green on the body/face to replace.</li>
-        <li><strong>Mark keep</strong> — tap red on props (popsicle, cup, phone) that must stay from the template.</li>
-        <li><strong>Upload your still</strong> of the person (a still that includes the prop helps even more).</li>
-        <li>Tap <strong>Generate Mix</strong>. Leave the tab open while Runpod runs.</li>
+        <li><strong>Choose a motion.</strong> Swipe sideways. Clips autoplay muted. Tap one to select it. Nothing is generated yet. Refresh reloads the gallery.</li>
+        <li><strong>Mark person</strong> (green). Tap the body or face of the person to replace.</li>
+        <li><strong>Mark keep</strong> (red). Tap a cup, phone, or other object that should stay from the template. Clear marks removes every dot. With no red marks, Generate asks you to confirm, because unmarked props may disappear.</li>
+        <li><strong>Upload a still</strong> of yourself (JPG or PNG). A face or full body works best. This step stays locked until a motion is selected. You can also drop a photo on the upload area.</li>
+        <li>The <strong>prompt</strong> is optional. It already asks to replace only the person and keep handheld objects from the template.</li>
+        <li>Tap <strong>Generate Mix</strong>. It stays off until a motion is selected, a still is uploaded, and at least one green person mark is placed.</li>
       </ol>
+
+      <h3>Waiting while it starts</h3>
+      <p>
+        The first Generate may take several minutes while the Runpod worker starts.
+        The status line shows when the job is queued or running. Leave this tab open.
+        If it times out, wait a minute and try once.
+      </p>
+      <p>The page shows the Runpod balance. <strong>Stop GPU</strong> stops the Runpod worker.</p>
+
+      <h3>Result</h3>
+      <p>
+        When a clip is ready, Result shows the video with playback controls.
+        <strong>Download</strong> saves the file.
+        <strong>Save to Photos</strong> opens the phone share sheet when this browser can share a video file, and downloads the file otherwise.
+      </p>
+
+      <h3>Extend</h3>
+      <p>
+        After a result, <strong>Extend for a longer clip</strong> offers a target length from 8 to 22 seconds, plus <strong>Extend once</strong> and <strong>Auto-extend</strong>.
+        Extend still uses the Hugging Face Space and cannot continue a Runpod clip.
+        Generate on this page runs on Runpod, so those Extend buttons will not lengthen that result.
+      </p>
 
       <h3>Templates</h3>
       <p>
-        Same catalog as Swapr:
+        Motions come from the same catalog as Swapr:
         <a href="https://huggingface.co/datasets/Simzy/wan22-template-clips" target="_blank" rel="noreferrer">Simzy/wan22-template-clips</a>.
       </p>
       <p class="muted">

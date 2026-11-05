@@ -481,14 +481,27 @@ function openHowto() {
   else els.howtoDialog.setAttribute("open", "");
 }
 function closeHowto() {
-  if (typeof els.howtoDialog.close === "function") els.howtoDialog.close();
-  else els.howtoDialog.removeAttribute("open");
+  if (els.howtoDialog.open && typeof els.howtoDialog.close === "function") {
+    els.howtoDialog.close();
+    return;
+  }
+  els.howtoDialog.removeAttribute("open");
   els.howtoBtn.focus();
 }
 els.howtoBtn.addEventListener("click", openHowto);
 els.howtoClose.addEventListener("click", closeHowto);
-els.howtoDialog.addEventListener("click", (e) => {
-  if (e.target === els.howtoDialog) closeHowto();
+els.howtoDialog.addEventListener("close", () => {
+  els.howtoBtn.focus();
+});
+els.howtoDialog.addEventListener("click", (event) => {
+  if (event.target !== els.howtoDialog) return;
+  const rect = els.howtoDialog.getBoundingClientRect();
+  const inside =
+    event.clientX >= rect.left &&
+    event.clientX <= rect.right &&
+    event.clientY >= rect.top &&
+    event.clientY <= rect.bottom;
+  if (!inside) closeHowto();
 });
 els.extendTarget.addEventListener("input", () => {
   els.extendTargetVal.textContent = `${els.extendTarget.value}s`;
