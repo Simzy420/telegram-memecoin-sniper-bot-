@@ -76,18 +76,17 @@ export function buildMaskPointFields(fields = {}) {
 }
 
 export const MIX_DEFAULT_PROMPT =
-  "replace the marked person with the person in the reference photo, natural motion, cinematic";
+  "replace the marked person with the exact face and identity from the uploaded reference photo — same person, not a lookalike — natural motion, sharp detail, no melting or morphing";
 
 export const MIX_PROP_PROMPT =
-  "replace the marked person with the person in the reference photo, and replace the marked handheld prop with the object in the corner of the reference photo, natural motion, cinematic";
+  "replace the marked person with the exact face and identity from the uploaded reference photo, and replace the marked handheld prop with the solid real object in the corner of the reference photo — keep prop edges sharp, no rubber plastic melt — natural motion, cinematic";
 
 /** Several green marks. Faces in the reference photo run left to right in tap order. */
 export const MIX_MULTI_PROMPT =
-  "replace each marked person with the matching face in the reference photo, left to right in the same order as the green marks, natural motion, cinematic";
+  "replace each marked person with the matching exact face from the uploaded reference photo, left to right in the same order as the green marks, same identities, natural motion, no morphing";
 
 export const MIX_MULTI_PROP_PROMPT =
-  "replace each marked person with the matching face in the reference photo, left to right in the same order as the green marks, and replace each marked handheld prop with the matching object in the corner of the reference photo, left to right, natural motion, cinematic";
-
+  "replace each marked person with the matching exact face from the uploaded reference photo, left to right in the same order as the green marks, and replace each marked handheld prop with the matching solid real object in the corner of the reference photo, left to right — no melted props";
 export const LEGACY_KEEP_PROMPTS = [
   "the person in the reference photo, replace only that person, keep every handheld object from the template unchanged and real",
   "the person in the reference photo, replace only that person, keep every handheld object prop food drink popsicle stick utensil and item from the template video unchanged and real, natural motion, cinematic",
@@ -137,4 +136,4 @@ export function mixPrompt(userPrompt, hasProp, personCount = 1) {
 }
 
 export const MIX_DEFAULT_NEGATIVE =
-  "色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 风格, 作品, 画作, 画面, 静止, 整体发灰, 最差质量, 低质量, JPEG压缩残留, 丑陋的, 残缺的, 多余的手指, 画得不好的手部, 画得不好的脸部, 畸形的, 毁容的, 形态畸形的肢体, 手指融合, 静止不动的画面, 杂乱的背景, 三条腿, 背景人很多, 倒着走";
+  "melted props, morphing objects, dissolving body parts, rubber plastic fake objects, identity drift, face not matching reference, wrong person, warped hands, fused anatomy, 色调艳丽, 过曝, 静态, 细节模糊不清, 字幕, 风格, 作品, 画作, 画面, 静止, 整体发灰, 最差质量, 低质量, JPEG压缩残留, 丑陋的, 残缺的, 多余的手指, 画得不好的手部, 画得不好的脸部, 畸形的, 毁容的, 形态畸形的肢体, 手指融合, 静止不动的画面, 杂乱的背景, 三条腿, 背景人很多, 倒着走";

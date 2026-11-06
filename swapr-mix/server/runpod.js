@@ -35,10 +35,10 @@ const RUNPOD_DEFAULTS = {
   width: 480,
   height: 832,
   fps: 16,
-  // The worker's face LoRA is already strength 1.0. CFG 1 keeps that LoRA in
-  // charge. 8 steps adds detail on the lightx2v stack without a long run.
-  cfg: 1,
-  steps: 8,
+  // Higher CFG pulls harder toward the prompt + reference still (fixes weak
+  // face lock). More steps buy detail and cleaner props; slower / costlier.
+  cfg: 3.5,
+  steps: 16,
   mode: "replace",
 };
 

@@ -22,6 +22,7 @@ import { generateFailureText, publicErrorText } from "../server/gatewayError.js"
 import { generateBlockReason, slotLabel } from "../server/markPairing.js";
 import { MIX_DEFAULT_NEGATIVE, isBareMixPrompt, mixStockPrompt } from "../server/mixPoints.js";
 import { templatePromptText } from "../server/templatePrompt.js";
+import { applyMixCatalogPrompts, MIX_CLIP_NEGATIVE } from "../server/mixCatalogPrompts.js";
 import { rewriteSpaceVideoUrl } from "../server/videoUrl.js";
 
 // Initialize Vercel Web Analytics
@@ -255,7 +256,8 @@ function applyTemplatePrompt(template) {
     els.prompt.value = templatePromptText(template);
     promptFromTemplate = true;
   }
-  const negative = String(template?.negative_prompt || "").trim() || MIX_DEFAULT_NEGATIVE;
+  const negative =
+    String(template?.negative_prompt || "").trim() || MIX_CLIP_NEGATIVE || MIX_DEFAULT_NEGATIVE;
   if (els.negativePrompt) els.negativePrompt.value = negative;
   if (els.extendNegative) els.extendNegative.value = negative;
 }
@@ -462,7 +464,7 @@ async function loadCatalog() {
   try {
     const res = await fetch(CATALOG_URL + (CATALOG_URL.includes("?") ? "&" : "?") + "t=" + Date.now());
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    templates = await res.json();
+    templates = applyMixCatalogPrompts(await res.json());
     if (!Array.isArray(templates) || !templates.length) {
       els.status.textContent = "No templates in catalog yet.";
       lockUpload();
@@ -1032,9 +1034,9 @@ function generateArgs(size) {
     max_seconds: 3,
     height: target.height,
     width: target.width,
-    steps: 8,
-    guidance: 1,
-    cfg: 1,
+    steps: 16,
+    guidance: 3.5,
+    cfg: 3.5,
     sample_shift: 5,
     negative: els.negativePrompt ? els.negativePrompt.value.trim() : "",
     seed: Math.floor(Math.random() * 1_000_000_000),
@@ -1426,8 +1428,8 @@ els.btnStop?.addEventListener("click", async () => {
 });
 
 syncDefaultPrompt();
-if (els.negativePrompt && !els.negativePrompt.value.trim()) els.negativePrompt.value = MIX_DEFAULT_NEGATIVE;
-if (els.extendNegative && !els.extendNegative.value.trim()) els.extendNegative.value = MIX_DEFAULT_NEGATIVE;
+if (els.negativePrompt && !els.negativePrompt.value.trim()) els.negativePrompt.value = MIX_CLIP_NEGATIVE;
+if (els.extendNegative && !els.extendNegative.value.trim()) els.extendNegative.value = MIX_CLIP_NEGATIVE;
 refreshBalance();
 setInterval(refreshBalance, 30000);
 updateGenerateEnabled();

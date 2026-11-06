@@ -70,10 +70,12 @@ describe("mixPoints", () => {
 
   it("exports replace-person and replace-prop prompts", () => {
     assert.match(MIX_DEFAULT_PROMPT, /marked person/i);
+    assert.match(MIX_DEFAULT_PROMPT, /exact face|uploaded reference photo/i);
     assert.doesNotMatch(MIX_DEFAULT_PROMPT, /keep every handheld|props to keep/i);
     assert.match(MIX_PROP_PROMPT, /marked handheld prop/i);
     assert.match(MIX_PROP_PROMPT, /corner of the reference photo/i);
     assert.match(MIX_DEFAULT_NEGATIVE, /最差质量|畸形的/);
+    assert.match(MIX_DEFAULT_NEGATIVE, /melted props|identity drift/i);
     assert.equal(mixPrompt(LEGACY_KEEP_PROMPTS[0], false), MIX_DEFAULT_PROMPT);
     assert.equal(mixPrompt(MIX_PROP_PROMPT, false), MIX_DEFAULT_PROMPT);
     assert.equal(mixPrompt(MIX_DEFAULT_PROMPT, true), MIX_PROP_PROMPT);
