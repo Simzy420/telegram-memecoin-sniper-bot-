@@ -441,7 +441,7 @@ function focusUpload() {
   els.uploadSection.classList.add("is-ready");
   els.uploadSection.setAttribute("aria-disabled", "false");
   els.uploadHint.textContent =
-    "Upload one face for each green mark (Person 1, Person 2, …) and one still for each red prop mark.";
+    "Upload a photo or video for each green mark (Person 1, Person 2, …) and one still for each red prop mark.";
   els.uploadSection.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
   els.uploadSection.focus({ preventScroll: true });
   renderMarkSlots();
@@ -549,15 +549,91 @@ function imageFiles(fileList) {
   return [...(fileList || [])].filter((file) => file && String(file.type || "").startsWith("image/"));
 }
 
+function isVideoFile(file) {
+  if (!file) return false;
+  const type = String(file.type || "");
+  if (type.startsWith("video/")) return true;
+  return /\.(mp4|mov|m4v|webm)$/i.test(file.name || "");
+}
+
+function faceMediaFiles(fileList) {
+  return [...(fileList || [])].filter((file) => file && (String(file.type || "").startsWith("image/") || isVideoFile(file)));
+}
+
+/** A chosen video becomes one sharp frame so that person can be face-swapped onto the template. */
+async function frameFromVideo(file) {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = url;
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("That video took too long to open.")), 15000);
+      video.addEventListener(
+        "loadeddata",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+      video.addEventListener(
+        "error",
+        () => {
+          clearTimeout(timer);
+          reject(new Error("Could not read that video."));
+        },
+        { once: true },
+      );
+    });
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    const at = duration > 0.4 ? Math.min(0.8, duration * 0.25) : 0;
+    if (at > 0) {
+      await new Promise((resolve) => {
+        video.addEventListener("seeked", resolve, { once: true });
+        setTimeout(resolve, 700);
+        try {
+          video.currentTime = at;
+        } catch {
+          resolve();
+        }
+      });
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 480;
+    canvas.height = video.videoHeight || 832;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    const still = await canvasToJpeg(canvas, "face-from-video.jpg", 0.95);
+    if (!still) throw new Error("Could not read a frame from that video.");
+    return still;
+  } finally {
+    URL.revokeObjectURL(url);
+    video.removeAttribute("src");
+    video.load();
+  }
+}
+
 function revokePreviews(kind) {
   for (const url of previewUrls[kind]) URL.revokeObjectURL(url);
   previewUrls[kind] = [];
 }
 
-function setSlotFile(kind, index, fileList) {
+async function setSlotFile(kind, index, fileList) {
   if (uploadsLocked()) return;
-  const file = imageFiles(fileList)[0];
-  if (!file) return;
+  const picked = (kind === "prop" ? imageFiles(fileList) : faceMediaFiles(fileList))[0];
+  if (!picked) return;
+  let file = picked;
+  if (kind !== "prop" && isVideoFile(picked)) {
+    if (els.maskStatus) els.maskStatus.textContent = `Reading a face frame from your video for ${slotLabel(kind, index)}…`;
+    try {
+      file = await frameFromVideo(picked);
+    } catch (error) {
+      if (els.gateHint) els.gateHint.textContent = error instanceof Error ? error.message : "Could not read that video.";
+      return;
+    }
+  }
   const files = kind === "prop" ? propFiles : personFiles;
   if (index < 0 || index >= files.length) return;
   files[index] = file;
@@ -601,11 +677,11 @@ function renderKindSlots(kind) {
     zone.className = `upload-zone ${isProp ? "prop-zone" : "person-zone"}${file ? " has-file" : ""}`;
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = isProp ? "image/*" : "image/*,video/*";
     input.hidden = true;
     input.disabled = uploadsLocked();
     input.className = isProp ? "prop-input" : "photo-input";
-    input.setAttribute("aria-label", `${isProp ? "Prop still" : "Face"} for ${label}`);
+    input.setAttribute("aria-label", isProp ? `Prop still for ${label}` : `Photo or video for ${label}`);
     input.addEventListener("change", () => {
       if (input.files && input.files.length) setSlotFile(kind, index, input.files);
     });
@@ -631,10 +707,10 @@ function renderKindSlots(kind) {
     icon.setAttribute("aria-hidden", "true");
     icon.textContent = "⬆";
     const strong = document.createElement("strong");
-    strong.textContent = isProp ? `Upload still for ${label}` : `Upload face for ${label}`;
+    strong.textContent = isProp ? `Upload still for ${label}` : `Upload photo or video for ${label}`;
     const hint = document.createElement("span");
     hint.className = "muted";
-    hint.textContent = "One still · JPG / PNG";
+    hint.textContent = isProp ? "One still · JPG / PNG" : "Photos and videos · a video uses one frame as the face";
     inner.append(icon, strong, hint);
     zone.append(input, inner);
 
@@ -782,7 +858,7 @@ function closeBitmaps(bitmaps) {
   }
 }
 
-async function canvasToJpeg(canvas, name) {
+async function canvasToJpeg(canvas, name, quality = 0.95) {
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
   if (!blob) return null;
   return new File([blob], name, { type: "image/jpeg" });
@@ -946,9 +1022,9 @@ function generateArgs(size) {
     max_seconds: 3,
     height: target.height,
     width: target.width,
-    steps: 10,
-    guidance: 2,
-    cfg: 2,
+    steps: 8,
+    guidance: 1,
+    cfg: 1,
     sample_shift: 5,
     negative: "",
     seed: Math.floor(Math.random() * 1_000_000_000),

@@ -1278,7 +1278,7 @@ Templates are real ~4s human-motion videos from [`{TEMPLATE_DATASET}`](https://h
             with gr.Row():
                 height = gr.Slider(256, 720, value=480, step=16, label="Height")
                 width = gr.Slider(256, 720, value=384, step=16, label="Width")
-            anim_steps = gr.Slider(1, 12, value=6, step=1, label="Inference steps")
+            anim_steps = gr.Slider(1, 12, value=8, step=1, label="Inference steps")
             guidance = gr.Slider(1.0, 5.0, value=1.0, step=0.1, label="Guidance (1=off)")
             sample_shift = gr.Slider(1.0, 10.0, value=5.0, step=0.5, label="Sample shift")
             seed = gr.Number(value=42, label="Seed", precision=0)

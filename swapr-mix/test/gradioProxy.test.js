@@ -631,7 +631,9 @@ describe("phone UI wiring", () => {
     assert.match(main, /promptFromTemplate/);
     assert.match(main, /keepLooping/);
     assert.match(main, /progressLabel/);
-    assert.match(main, /GENERATE_EXPECTED_MS/);
+    assert.match(main, /image\/\*,video\/\*/);
+    assert.match(main, /frameFromVideo/);
+    assert.match(main, /steps: 8/);
     assert.doesNotMatch(page, /Mark keep|objects to keep|props to keep|Keep the props/);
     const toml = readFileSync(new URL("../netlify.toml", import.meta.url), "utf8");
     assert.match(toml, /\[functions\."generate-background"\]/);

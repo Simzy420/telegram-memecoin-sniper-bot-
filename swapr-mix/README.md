@@ -21,7 +21,7 @@ Swapr Mix:
 4. Generate stays off until every Person slot and every Prop slot has a still.
 5. Generate sends `points_store` / `coordinates` / `neg_coordinates` so Runpod loads `newWanAnimate_point_api.json`. Every green mark and every red mark is a **positive** SAM point (the region to replace). The hub still requires a dummy `neg_coordinates` point; that point does not mean “keep.”
 6. Wan Animate’s Runpod handler and the Space `/generate` route each accept **one** reference image (`image_base64` / a single `image`). The phone composites Person 1, Person 2, … left to right into that JPEG, in the same order as the green points. One green mark still sends a single face, unchanged. Prop stills are composited left to right, inset into the corner of the reference JPEG, and also sent as `prop_image_base64`. With more than one face, the phone leaves the bottom of the strip clear so that corner inset does not cover the last face.
-7. Slightly stronger Mix defaults (steps 5, cfg 1, replace-person / replace-prop prompt, standard Wan negative). Two or more green marks switch the stock prompt to a left-to-right face match.
+7. Mix quality defaults match the worker’s face LoRA, which is already strength 1.0 in the Runpod workflow. CFG stays at 1 so that LoRA drives the face, and steps are 8 for more detail. Reference stills are saved at higher JPEG quality. Two or more green marks switch the stock prompt to a left-to-right face match.
 
 Same Runpod endpoint and template catalog as Swapr. Same phone proxy pattern (`USE_PROXY: true`).
 

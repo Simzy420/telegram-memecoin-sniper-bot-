@@ -82,7 +82,7 @@ export function compositeReferenceStill(personBytes, propBytes) {
   const rect = propInsetRect(width, height, prop.width, prop.height);
   fillRect(out, width, height, rect.x - rect.border, rect.y - rect.border, rect.dw + rect.border * 2, rect.dh + rect.border * 2, 255, 255, 255);
   blit(out, width, height, prop, rect.x, rect.y, rect.dw, rect.dh);
-  const encoded = encode({ data: out, width, height }, 85);
+  const encoded = encode({ data: out, width, height }, 92);
   return Buffer.from(encoded.data);
 }
 

@@ -116,7 +116,7 @@ describe("Runpod Wan Animate client", () => {
     assert.equal(input.height, 832);
     assert.equal(input.fps, 16);
     assert.equal(input.cfg, 5);
-    assert.equal(input.steps, 5);
+    assert.equal(input.steps, 8);
     assert.equal(input.mode, "replace");
     assert.equal(input.seed, 42);
     assert.match(input.negative_prompt, /低质量|畸形的/);
