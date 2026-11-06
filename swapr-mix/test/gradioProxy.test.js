@@ -624,6 +624,14 @@ describe("phone UI wiring", () => {
     assert.match(page, /prop-slots/);
     assert.match(page, /Person 1 is the first/);
     assert.match(page, /one face each/);
+    assert.match(page, /auto-filled, edit if needed/);
+    assert.match(page, /id="gen-progress"/);
+    assert.match(page, /id="result-video" playsinline loop/);
+    assert.match(main, /templatePromptText\(/);
+    assert.match(main, /promptFromTemplate/);
+    assert.match(main, /keepLooping/);
+    assert.match(main, /progressLabel/);
+    assert.match(main, /GENERATE_EXPECTED_MS/);
     assert.doesNotMatch(page, /Mark keep|objects to keep|props to keep|Keep the props/);
     const toml = readFileSync(new URL("../netlify.toml", import.meta.url), "utf8");
     assert.match(toml, /\[functions\."generate-background"\]/);

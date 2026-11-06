@@ -11,9 +11,16 @@
  * insets them into the corner of that reference image.
  */
 import { inject } from '@vercel/analytics';
+import {
+  EXTEND_EXPECTED_MS,
+  GENERATE_EXPECTED_MS,
+  generateProgress,
+  progressLabel,
+} from "../server/generateProgress.js";
 import { generateFailureText, publicErrorText } from "../server/gatewayError.js";
 import { generateBlockReason, slotLabel } from "../server/markPairing.js";
 import { isBareMixPrompt, mixStockPrompt } from "../server/mixPoints.js";
+import { templatePromptText } from "../server/templatePrompt.js";
 import { rewriteSpaceVideoUrl } from "../server/videoUrl.js";
 
 // Initialize Vercel Web Analytics
@@ -75,6 +82,10 @@ const els = {
   prompt: document.getElementById("prompt"),
   gateHint: document.getElementById("gate-hint"),
   btnGen: document.getElementById("btn-generate"),
+  genProgress: document.getElementById("gen-progress"),
+  genProgressTrack: document.getElementById("gen-progress-track"),
+  genProgressFill: document.getElementById("gen-progress-fill"),
+  genProgressLabel: document.getElementById("gen-progress-label"),
   genStatus: document.getElementById("gen-status"),
   resultPanel: document.getElementById("result-panel"),
   resultVideo: document.getElementById("result-video"),
@@ -94,6 +105,10 @@ const els = {
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let playObserver = null;
+let promptFromTemplate = false;
+let progressTimer = 0;
+let progressStarted = 0;
+let progressExpected = GENERATE_EXPECTED_MS;
 
 function videoUrl(t) {
   if (t.video_url) return t.video_url;
@@ -223,10 +238,17 @@ function drawMaskCanvas() {
 }
 
 function syncDefaultPrompt() {
-  if (!els.prompt) return;
+  if (!els.prompt || promptFromTemplate) return;
   const current = els.prompt.value.trim();
   if (!isBareMixPrompt(current)) return;
   els.prompt.value = mixStockPrompt(propPoints.length > 0, positivePoints.length);
+}
+
+/** Same catalog prompt Swapr writes when a template is selected. */
+function applyTemplatePrompt(template) {
+  if (!els.prompt) return;
+  els.prompt.value = templatePromptText(template);
+  promptFromTemplate = true;
 }
 
 function refreshMarks() {
@@ -335,10 +357,27 @@ function removeMark(kind, index) {
   refreshMarks();
 }
 
+function keepLooping(video) {
+  if (!video) return;
+  video.loop = true;
+  video.setAttribute("loop", "");
+  if (video.dataset.loopArmed === "1") return;
+  video.dataset.loopArmed = "1";
+  video.addEventListener("ended", () => {
+    try {
+      video.currentTime = 0;
+    } catch {
+      /* some clips reject a seek exactly at the end */
+    }
+    const pending = video.play();
+    if (pending && typeof pending.catch === "function") pending.catch(() => {});
+  });
+}
+
 function armVideo(vid) {
   vid.muted = true;
   vid.defaultMuted = true;
-  vid.loop = true;
+  keepLooping(vid);
   vid.playsInline = true;
   vid.autoplay = true;
   vid.setAttribute("muted", "");
@@ -482,6 +521,7 @@ function selectTemplate(id, opts = {}) {
     }
   });
   if (!t) {
+    promptFromTemplate = false;
     lockUpload();
     if (els.maskSection) {
       els.maskSection.hidden = true;
@@ -493,6 +533,7 @@ function selectTemplate(id, opts = {}) {
   els.selectedPanel.hidden = false;
   els.selectedTitle.textContent = t.title || t.id;
   els.selectedDesc.textContent = t.description || "";
+  applyTemplatePrompt(t);
   syncPlayback();
   loadMaskFrame(t).catch((e) => {
     if (els.maskStatus) els.maskStatus.textContent = `Could not load frame: ${e.message}`;
@@ -638,14 +679,34 @@ els.extendTarget.addEventListener("input", () => {
   els.extendTargetVal.textContent = `${els.extendTarget.value}s`;
 });
 
-function setBusy(msg) {
+function paintProgress() {
+  const state = generateProgress(Date.now() - progressStarted, progressExpected);
+  if (els.genProgressFill) els.genProgressFill.style.width = `${state.percent}%`;
+  if (els.genProgressTrack) {
+    els.genProgressTrack.setAttribute("aria-valuenow", String(state.percent));
+    els.genProgressTrack.setAttribute("aria-valuetext", progressLabel(state));
+  }
+  if (els.genProgressLabel) els.genProgressLabel.textContent = progressLabel(state);
+}
+
+function setBusy(msg, expectedMs = GENERATE_EXPECTED_MS) {
   els.genStatus.textContent = msg || "";
   els.btnGen.disabled = true;
   els.btnExtend.disabled = true;
   els.btnAuto.disabled = true;
+  progressExpected = expectedMs;
+  progressStarted = Date.now();
+  if (els.genProgress) els.genProgress.hidden = false;
+  paintProgress();
+  window.clearInterval(progressTimer);
+  progressTimer = window.setInterval(paintProgress, 1000);
 }
 
 function clearBusy() {
+  window.clearInterval(progressTimer);
+  progressTimer = 0;
+  if (els.genProgressFill) els.genProgressFill.style.width = "100%";
+  if (els.genProgress) els.genProgress.hidden = true;
   updateGenerateEnabled();
   els.btnExtend.disabled = false;
   els.btnAuto.disabled = false;
@@ -661,6 +722,7 @@ function showResult(fileOrUrl) {
   url = rewriteSpaceVideoUrl(url, SPACE);
   lastResultUrl = url;
   els.resultPanel.hidden = false;
+  keepLooping(els.resultVideo);
   els.resultVideo.src = lastResultUrl;
   els.resultVideo.play().catch(() => {});
   els.btnDownload.href = lastResultUrl;
@@ -1003,7 +1065,7 @@ els.btnGen.addEventListener("click", async () => {
     if (els.gateHint) els.gateHint.textContent = blocked;
     return;
   }
-  setBusy(`Queuing Mix on Runpod… ${GENERATE_WAIT}`);
+  setBusy(`Queuing Mix on Runpod… ${GENERATE_WAIT}`, GENERATE_EXPECTED_MS);
   try {
     const size = await templateSize(templates.find((t) => t.id === selectedId));
     const target = workerSize(size);
@@ -1055,7 +1117,7 @@ async function extendOnce(auto) {
     els.genStatus.textContent = "Generate a clip first.";
     return;
   }
-  setBusy(auto ? `Auto-extending on the Space… ${EXTEND_WAIT}` : `Extending on the Space… ${EXTEND_WAIT}`);
+  setBusy(auto ? `Auto-extending on the Space… ${EXTEND_WAIT}` : `Extending on the Space… ${EXTEND_WAIT}`, EXTEND_EXPECTED_MS);
   try {
     const api = auto ? "/auto_extend" : "/extend";
     if (!sessionId) {

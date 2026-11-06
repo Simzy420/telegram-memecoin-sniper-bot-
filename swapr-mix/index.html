@@ -78,12 +78,18 @@
       </section>
 
       <section class="section">
-        <h2>Prompt <span class="muted">(optional)</span></h2>
-        <textarea id="prompt" rows="3" placeholder="replace each marked person, and any marked prop…">replace the marked person with the person in the reference photo, natural motion, cinematic</textarea>
+        <h2>Prompt <span class="muted">(auto-filled, edit if needed)</span></h2>
+        <textarea id="prompt" rows="3" placeholder="a person, natural motion, cinematic…">a person, natural motion, cinematic, high quality</textarea>
       </section>
 
       <section class="section actions">
         <button type="button" id="btn-generate" class="primary" disabled>Generate Mix</button>
+        <div id="gen-progress" class="gen-progress" hidden>
+          <div id="gen-progress-track" class="gen-progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-label="Generate progress">
+            <div id="gen-progress-fill" class="gen-progress-fill"></div>
+          </div>
+          <p id="gen-progress-label" class="muted">About 5:00 left</p>
+        </div>
         <p id="gate-hint" class="muted" aria-live="polite"></p>
         <p class="muted">Uses Wan Animate replace with your SAM marks on Runpod. The first Generate may take several minutes while the worker starts. Leave this tab open.</p>
         <p id="gen-status" class="muted" aria-live="polite"></p>
@@ -100,7 +106,7 @@
       <section class="section" id="result-panel" hidden>
         <h2>Result</h2>
         <div class="card">
-          <video id="result-video" playsinline controls></video>
+          <video id="result-video" playsinline loop controls></video>
           <div class="row">
             <a id="btn-download" class="secondary" href="#" download="swapr-mix.mp4">Download</a>
             <button type="button" id="btn-save-photos" class="secondary">Save to Photos</button>
