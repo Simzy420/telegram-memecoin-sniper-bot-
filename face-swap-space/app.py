@@ -373,6 +373,7 @@ def _raise_segment_error(action: str, exc: Exception) -> None:
 
 
 def _runpod_progress(progress, phase: str, elapsed: float) -> None:
+    """Paint I2V phases. Never hit 1.0 — only the outer handler finalizes."""
     if not progress:
         return
     if phase == "submit":
@@ -380,7 +381,7 @@ def _runpod_progress(progress, phase: str, elapsed: float) -> None:
         return
     if phase == "IN_QUEUE":
         progress(
-            0.25,
+            min(0.35, 0.2 + float(elapsed) / 900.0),
             desc=(
                 "Waiting for a RunPod worker "
                 f"(cold start + model download can take several minutes)… {int(elapsed)}s"
@@ -388,7 +389,14 @@ def _runpod_progress(progress, phase: str, elapsed: float) -> None:
         )
         return
     if phase == "IN_PROGRESS":
-        progress(0.6, desc=f"RunPod is generating this segment… {int(elapsed)}s")
+        progress(
+            min(0.75, 0.45 + float(elapsed) / 1200.0),
+            desc=f"RunPod is generating this segment… {int(elapsed)}s",
+        )
+        return
+    if phase == "COMPLETED":
+        # Status payload can include a large base64 MP4; keep the bar honest.
+        progress(0.85, desc="RunPod finished — reading video payload…")
         return
     if phase == "save":
         progress(0.92, desc="Saving video…")
@@ -398,6 +406,7 @@ def _runpod_progress(progress, phase: str, elapsed: float) -> None:
 
 
 def _faceswap_progress(progress, phase: str, elapsed: float) -> None:
+    """Paint swap phases. Cap below 1.0 so nested 'Run both' does not look done."""
     if not progress:
         return
     if phase == "submit":
@@ -406,7 +415,7 @@ def _faceswap_progress(progress, phase: str, elapsed: float) -> None:
     if phase == "IN_QUEUE":
         # Creep so the bar cannot sit on one number for the whole cold start.
         progress(
-            min(0.5, 0.2 + float(elapsed) / 800.0),
+            min(0.45, 0.2 + float(elapsed) / 800.0),
             desc=(
                 "Waiting for a face-swap worker "
                 f"(cold start can take several minutes)… {int(elapsed)}s"
@@ -414,10 +423,16 @@ def _faceswap_progress(progress, phase: str, elapsed: float) -> None:
         )
         return
     if phase in ("IN_PROGRESS", "Swapping…"):
-        progress(min(0.88, 0.55 + float(elapsed) / 900.0), desc=f"Swapping face… {int(elapsed)}s")
+        progress(
+            min(0.75, 0.5 + float(elapsed) / 1200.0),
+            desc=f"Swapping face… {int(elapsed)}s",
+        )
+        return
+    if phase == "COMPLETED":
+        progress(0.82, desc="Swap finished — decoding image…")
         return
     if phase == "save":
-        progress(0.9, desc="Saving swapped still…")
+        progress(0.88, desc="Saving swapped still…")
         return
     if phase:
         progress(0.35, desc=f"Face-swap status: {phase}… {int(elapsed)}s")
@@ -429,6 +444,9 @@ def _pump_blocking(progress, start_desc: str, worker, paint):
     Gradio only delivers progress from the request thread. The face-swap
     client blocks inside urllib, so the bar would stay on the first 5% tick
     for the whole job.
+
+    Never paints 1.0 — callers must finalize only when the Gradio return
+    values are fully ready (otherwise the UI sits at 100% with no output).
     """
     phases: list[tuple[str, float]] = []
     box: dict[str, Any] = {}
@@ -449,13 +467,40 @@ def _pump_blocking(progress, start_desc: str, worker, paint):
         if phases:
             phase, elapsed = phases[-1]
             paint(progress, phase, elapsed)
-        else:
+        elif progress:
             waited = time.monotonic() - started
             progress(min(0.15, 0.06 + waited / 400.0), desc=f"{start_desc} {int(waited)}s")
         thread.join(timeout=1.0)
     if box.get("error") is not None:
         raise box["error"]
+    if "result" not in box:
+        raise RuntimeError(f"{start_desc}: worker thread finished with no result.")
     return box["result"]
+
+
+def _require_media_file(path: str | Path | None, kind: str) -> str:
+    """Fail clearly if a return path is missing — never hand Gradio a dead path."""
+    if path is None:
+        raise gr.Error(f"{kind} is missing after the job finished.")
+    p = Path(str(path))
+    try:
+        ok = p.is_file() and p.stat().st_size >= 32
+    except OSError as exc:
+        raise gr.Error(f"{kind} could not be read ({p.name}): {exc}") from exc
+    if not ok:
+        raise gr.Error(f"{kind} was not written (missing or empty): {p}")
+    return str(p.resolve())
+
+
+def _slider_file_pair(
+    before: Image.Image, after: Image.Image, sess: Path
+) -> tuple[str, str]:
+    """Write before/after stills to disk so ImageSlider postprocess stays fast."""
+    before_path = sess / f"before_{uuid.uuid4().hex[:10]}.png"
+    after_path = sess / f"after_{uuid.uuid4().hex[:10]}.png"
+    before.convert("RGB").save(before_path, format="PNG")
+    after.convert("RGB").save(after_path, format="PNG")
+    return str(before_path), str(after_path)
 
 
 def call_runpod_i2v(
@@ -707,18 +752,25 @@ def do_generate(
 
     out = sess / "current.mp4"
     shutil.copy2(clip, out)
+    # Separate copy for Download so Gradio cache moves cannot race the preview path.
+    download_path = sess / f"download_{uuid.uuid4().hex[:8]}.mp4"
+    shutil.copy2(out, download_path)
     last = extract_last_frame(out, sess / "last_frame")
     dur = video_duration_seconds(out)
     state["segments"] = [str(clip)]
     state["video"] = str(out)
     state["last_frame"] = str(last)
     state["prompt"] = prompt
-    progress(1.0, desc="Done")
+    video_out = _require_media_file(out, "Preview MP4")
+    file_out = _require_media_file(download_path, "Download MP4")
+    last_out = _require_media_file(last, "Last frame")
+    if progress:
+        progress(1.0, desc="Done")
     return (
-        str(out),
-        str(out),
+        video_out,
+        file_out,
         status_line(state["segments"], dur),
-        str(last),
+        last_out,
         state,
     )
 
@@ -781,12 +833,18 @@ def do_extend(
     state["video"] = str(out)
     state["last_frame"] = str(last)
     state["prompt"] = use_prompt
-    progress(1.0, desc="Extended")
+    download_path = sess / f"download_{uuid.uuid4().hex[:8]}.mp4"
+    shutil.copy2(out, download_path)
+    video_out = _require_media_file(out, "Preview MP4")
+    file_out = _require_media_file(download_path, "Download MP4")
+    last_out = _require_media_file(last, "Last frame")
+    if progress:
+        progress(1.0, desc="Extended")
     return (
-        str(out),
-        str(out),
+        video_out,
+        file_out,
         status_line(state["segments"], dur),
-        str(last),
+        last_out,
         state,
     )
 
@@ -939,15 +997,22 @@ def do_two_swap(
                 f"({jobs} RunPod jobs, first {int(dual_faces.MAX_CLIP_SECONDS)}s at "
                 f"{int(dual_faces.SAMPLE_FPS)} fps)."
             )
-            progress(1.0, desc="Clip done")
-            return str(still_out), str(clip_out), note, state
+            still_path = _require_media_file(still_out, "Swapped picture")
+            clip_path_out = _require_media_file(clip_out, "Swapped clip")
+            if progress:
+                progress(1.0, desc="Clip done")
+            return still_path, clip_path_out, note, state
 
         progress(0.1, desc="Swapping the person on the left…")
         calls = {"n": 0}
 
         def counted(face: Image.Image, crop: Image.Image) -> Image.Image:
             calls["n"] += 1
-            progress(0.15 + 0.35 * calls["n"], desc=f"Swapping person {calls['n']} of 2…")
+            # Stay under 1.0 until files are on disk and ready to return.
+            progress(
+                min(0.9, 0.15 + 0.35 * calls["n"]),
+                desc=f"Swapping person {calls['n']} of 2…",
+            )
             return swap_one(face, crop)
 
         result, info = dual_faces.swap_two_faces(scene, left, right, counted)
@@ -959,8 +1024,10 @@ def do_two_swap(
     state["swapped"] = str(still_out)
     how = "two detected faces" if info["method"] == "faces" else "the left half and the right half"
     note = f"Replaced both people using {how}."
-    progress(1.0, desc="Swap done")
-    return str(still_out), None, note, state
+    still_path = _require_media_file(still_out, "Swapped picture")
+    if progress:
+        progress(1.0, desc="Swap done")
+    return still_path, None, note, state
 
 
 def do_swap(
@@ -975,6 +1042,8 @@ def do_swap(
     swap_prompt,
     state: dict,
     progress=gr.Progress(track_tqdm=False),
+    *,
+    finalize_progress: bool = True,
 ):
     hf_auth.require_unlocked(state)
     ref = load_pil_image(reference_face)
@@ -1016,13 +1085,14 @@ def do_swap(
         _raise_segment_error("Face swap", e)
 
     # Unique filename so Gradio/browser do not reuse a cached swapped.png path.
+    if progress:
+        progress(0.9, desc="Writing swapped still…")
     saved = sess / f"swapped_{uuid.uuid4().hex[:10]}.png"
     result.save(saved)
     before = tgt.copy()
     after = result.copy()
     state["swapped"] = str(saved)
     state["swap_seed"] = meta.get("seed", seed)
-    progress(1.0, desc="Swap done")
     used_seed = state["swap_seed"]
     mad = _mean_abs_diff(before, after)
     note = status_line(state.get("segments") or [], 0.0)
@@ -1033,8 +1103,24 @@ def do_swap(
             "Check uploads: left = face to copy, right = body/scene to keep. "
             "Try Base model or raise BFS LoRA strength."
         )
-    # ImageSlider wants (before, after) = (original target, swapped result)
-    return (before, after), used_seed, note, state
+    # File paths (not in-memory PILs): ImageSlider postprocess stays fast and reliable.
+    if progress:
+        progress(0.95 if finalize_progress else 0.4, desc="Preparing before/after preview…")
+    try:
+        slider = _slider_file_pair(before, after, sess)
+        _require_media_file(slider[0], "Before preview")
+        _require_media_file(slider[1], "After preview")
+        _require_media_file(saved, "Swapped still")
+    except gr.Error:
+        raise
+    except Exception as exc:
+        raise gr.Error(f"Face swap finished but could not prepare the preview: {exc}") from exc
+    if finalize_progress and progress:
+        progress(1.0, desc="Swap done")
+    elif progress:
+        # "Run both" continues into I2V — do NOT paint 1.0 or the UI hangs at 100%.
+        progress(0.42, desc="Swap done — starting video…")
+    return slider, used_seed, note, state
 
 
 def do_run_both(
@@ -1061,6 +1147,9 @@ def do_run_both(
 ):
     """Swap → still → Generate I2V → MP4."""
     hf_auth.require_unlocked(state)
+    # Critical: do_swap must not paint progress(1.0) here. Default mode is
+    # "Run both steps"; finishing the bar after swap left the UI at 100% for
+    # the whole I2V wait, then the proxy timed out with no video.
     slider, used_seed, swap_status, state = do_swap(
         reference_face,
         target_image,
@@ -1073,11 +1162,13 @@ def do_run_both(
         swap_prompt,
         state,
         progress=progress,
+        finalize_progress=False,
     )
     swapped_path = state.get("swapped")
     if not swapped_path:
         raise gr.Error("Face swap finished but no still was saved for I2V.")
-    progress(0.45, desc="Swap done — starting I2V generate…")
+    if progress:
+        progress(0.45, desc="Swap done — starting I2V generate…")
     video, download, status, last, state = do_generate(
         swapped_path,
         prompt,
@@ -1556,7 +1647,7 @@ def build_ui():
                 with gr.Column(scale=1):
                     comparison_slider = gr.ImageSlider(
                         label="Before / After — drag to compare (left=original body, right=swapped)",
-                        type="pil",
+                        type="filepath",
                         format="png",
                         slider_position=50,
                         height=360,
@@ -1732,7 +1823,11 @@ if __name__ == "__main__":
     # In-app password Unlock gates RunPod instead.
     demo = build_ui()
     hf_auth.require_password_configured()
-    allowed = [str(STATIC_DIR)] if STATIC_DIR.is_dir() else None
+    # WORK lives under tempfile and is usually allowed already; list it explicitly
+    # so preview/download paths never fail Gradio's file-access check after 1.0.
+    allowed = [str(WORK)]
+    if STATIC_DIR.is_dir():
+        allowed.append(str(STATIC_DIR))
     demo.queue(default_concurrency_limit=1).launch(
         server_name="0.0.0.0",
         server_port=7860,
