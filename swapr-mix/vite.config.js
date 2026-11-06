@@ -1,7 +1,27 @@
+import { readFileSync } from "node:fs";
 import { defineConfig } from "vite";
 import { handleGenerateRequest } from "./server/gradioProxy.js";
+import { handleBalanceRequest, handleStopRequest } from "./server/runpodAdmin.js";
 import { handleRunpodJobRequest, handleRunpodResultRequest } from "./server/runpodRoutes.js";
 import { handleVideoRequest } from "./server/videoProxy.js";
+
+const ASSET_VERSION = JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")).version;
+
+/** Query-string the built HTML so a phone that revalidates the document loads this deploy. */
+function cacheBustHtml() {
+  return {
+    name: "swapr-mix-cache-bust",
+    transformIndexHtml: {
+      order: "post",
+      handler(html) {
+        return html.replace(/(href|src)="([^"]+\.(?:js|css))(?:\?[^"]*)?"/g, (_match, attr, url) => {
+          const clean = url.split("?")[0];
+          return `${attr}="${clean}?v=${ASSET_VERSION}"`;
+        });
+      },
+    },
+  };
+}
 
 function webRequest(req, body) {
   const headers = new Headers();
@@ -28,6 +48,8 @@ function apiDev() {
           "/api/video": handleVideoRequest,
           "/api/job": handleRunpodJobRequest,
           "/api/result": handleRunpodResultRequest,
+          "/api/balance": handleBalanceRequest,
+          "/api/stop": handleStopRequest,
         };
         const handle = handlers[path];
         if (!handle) return next();
@@ -52,7 +74,7 @@ function apiDev() {
 export default defineConfig({
   root: ".",
   publicDir: "public",
-  plugins: [apiDev()],
+  plugins: [apiDev(), cacheBustHtml()],
   build: {
     outDir: "dist",
     emptyOutDir: true,

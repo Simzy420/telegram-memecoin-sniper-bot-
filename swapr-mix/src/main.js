@@ -1092,16 +1092,77 @@ async function extendOnce(auto) {
 els.btnExtend.addEventListener("click", () => extendOnce(false));
 els.btnAuto.addEventListener("click", () => extendOnce(true));
 
+const BILLING_URL = "https://console.runpod.io/user/billing";
+
+function balanceRows(data) {
+  if (Array.isArray(data?.accounts) && data.accounts.length) return data.accounts;
+  if (data && typeof data.balance === "number") {
+    return [{ label: "Runpod", balance: data.balance, spendPerHour: data.spendPerHour }];
+  }
+  return [];
+}
+
+function renderBalance(data) {
+  const accounts = balanceRows(data);
+  if (!accounts.length) throw new Error(data?.error || "No balance");
+  els.balance.replaceChildren();
+  for (const account of accounts) {
+    const label = account.label || "Runpod";
+    const row = document.createElement("p");
+    row.className = "balance-line";
+    const low = typeof account.balance === "number" && account.balance < 1;
+    if (low) row.classList.add("balance-low");
+    const text = document.createElement("span");
+    text.className = "balance-text";
+    if (typeof account.balance === "number") {
+      const amount = document.createElement("span");
+      amount.className = "balance-amount";
+      amount.textContent = `$${account.balance.toFixed(2)}`;
+      const spend = typeof account.spendPerHour === "number" ? ` · $${account.spendPerHour.toFixed(3)}/hr` : "";
+      text.append(`${label} `, amount, spend);
+      if (low) {
+        const flag = document.createElement("span");
+        flag.className = "balance-flag";
+        flag.textContent = "Low";
+        text.append(flag);
+      }
+    } else {
+      text.textContent = `${label} balance unavailable`;
+    }
+    const link = document.createElement("a");
+    link.className = "buy-credit";
+    link.href = BILLING_URL;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Buy credit";
+    link.setAttribute("aria-label", `Buy credit for ${label}`);
+    row.append(text, link);
+    els.balance.append(row);
+  }
+}
+
 async function refreshBalance() {
   if (!els.balance) return;
   try {
     const res = await fetch("/api/balance", { cache: "no-store" });
     const data = await res.json();
-    if (!res.ok || typeof data.balance !== "number") throw new Error(data.error || `HTTP ${res.status}`);
-    const spend = typeof data.spendPerHour === "number" ? ` · $${data.spendPerHour.toFixed(3)}/hr` : "";
-    els.balance.textContent = `Runpod balance $${data.balance.toFixed(2)}${spend}`;
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    renderBalance(data);
   } catch (e) {
-    els.balance.textContent = `Runpod balance unavailable (${e.message})`;
+    els.balance.replaceChildren();
+    const row = document.createElement("p");
+    row.className = "balance-line";
+    const text = document.createElement("span");
+    text.className = "balance-text";
+    text.textContent = `Runpod balance unavailable (${e.message})`;
+    const link = document.createElement("a");
+    link.className = "buy-credit";
+    link.href = BILLING_URL;
+    link.target = "_blank";
+    link.rel = "noopener";
+    link.textContent = "Buy credit";
+    row.append(text, link);
+    els.balance.append(row);
   }
 }
 

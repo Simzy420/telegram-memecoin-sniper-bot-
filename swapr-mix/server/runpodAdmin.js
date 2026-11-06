@@ -1,20 +1,18 @@
 /**
  * Runpod account helpers for the phone UI: live balance and "Stop GPU".
- * RUNPOD_API_KEY stays server-side. Nothing here returns the key.
+ * API keys stay server-side. Nothing here returns a key.
+ * Account 2 is used only when RUNPOD_API_KEY_2 is set; otherwise this matches
+ * the single-account behavior.
  */
-import { runpodEndpointId } from "./runpod.js";
+import { cachedRunpodBalance, listRunpodAccounts, parseRunpodJobId } from "./runpod.js";
 
-const GRAPHQL_URL = "https://api.runpod.io/graphql";
 const REST_URL = "https://rest.runpod.io/v1";
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-function apiKey(env) {
-  const key = String(env.RUNPOD_API_KEY || "").trim();
-  if (!key) {
-    const error = new Error("RUNPOD_API_KEY is not set on this site.");
-    error.statusCode = 500;
-    throw error;
-  }
-  return key;
+function missingKey() {
+  const error = new Error("RUNPOD_API_KEY is not set on this site.");
+  error.statusCode = 500;
+  throw error;
 }
 
 async function timed(fetchImpl, url, init = {}, ms = 15000) {
@@ -37,23 +35,34 @@ async function readJson(response) {
 }
 
 export async function fetchRunpodBalance(env = process.env, deps = {}) {
-  const fetchImpl = deps.fetch || fetch;
-  const key = apiKey(env);
-  const response = await timed(fetchImpl, GRAPHQL_URL, {
-    method: "POST",
-    headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
-    body: JSON.stringify({ query: "query { myself { clientBalance currentSpendPerHr } }" }),
-  });
-  const body = await readJson(response);
-  if (!response.ok || body.errors?.length) {
-    const message = body.errors?.map((e) => e.message).join("; ") || `Runpod GraphQL HTTP ${response.status}`;
-    throw new Error(message);
+  const accounts = listRunpodAccounts(env);
+  if (!accounts.length) missingKey();
+  const rows = [];
+  const failures = [];
+  for (const account of accounts) {
+    try {
+      const info = await cachedRunpodBalance(account.apiKey, deps);
+      rows.push({
+        label: account.label,
+        balance: info.balance,
+        spendPerHour: info.spendPerHour,
+        at: info.at,
+      });
+    } catch (error) {
+      failures.push(error);
+      rows.push({ label: account.label, balance: null, spendPerHour: null, at: null });
+    }
   }
-  const me = body.data?.myself || {};
+  if (failures.length === accounts.length) throw failures[0];
+  const primary =
+    rows.find((row) => row.label === "Runpod 1" && typeof row.balance === "number") ||
+    rows.find((row) => typeof row.balance === "number") ||
+    rows[0];
   return {
-    balance: typeof me.clientBalance === "number" ? me.clientBalance : null,
-    spendPerHour: typeof me.currentSpendPerHr === "number" ? me.currentSpendPerHr : null,
-    at: new Date().toISOString(),
+    balance: primary.balance,
+    spendPerHour: primary.spendPerHour,
+    at: primary.at || new Date().toISOString(),
+    accounts: rows.map(({ label, balance, spendPerHour }) => ({ label, balance, spendPerHour })),
   };
 }
 
@@ -75,24 +84,28 @@ async function patchEndpoint(endpoint, key, fetchImpl, patch) {
   return body;
 }
 
+function shouldCancelJob(rawJobId, tagged) {
+  if (!rawJobId || !/^[A-Za-z0-9_-]{6,96}$/.test(rawJobId)) return false;
+  if (tagged) return true;
+  return !UUID_RE.test(rawJobId);
+}
+
 /**
- * Stop background billing on the Wan Animate endpoint:
- * cancel the in-flight job (if known), purge the queue, force workersMin=0,
- * and briefly set workersMax=0 so running/idle workers are released, then
- * restore workersMax so the next Generate can still start a worker.
+ * Stop background billing on the Wan Animate endpoint for one account:
+ * cancel the in-flight job (if it belongs to this account), purge the queue,
+ * force workersMin=0, and briefly set workersMax=0 so running/idle workers
+ * are released, then restore workersMax so the next Generate can start.
  */
-export async function stopRunpodEndpoint(env = process.env, { jobId = "", restoreDelayMs = 6000 } = {}, deps = {}) {
-  const fetchImpl = deps.fetch || fetch;
-  const sleep = deps.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
-  const key = apiKey(env);
-  const endpoint = runpodEndpointId(env);
+async function stopOneAccount(account, { rawJobId, tagged, restoreDelayMs, fetchImpl, sleep }) {
   const steps = [];
+  const endpoint = account.endpointId;
+  const key = account.apiKey;
   const base = `https://api.runpod.ai/v2/${endpoint}`;
   const auth = { authorization: `Bearer ${key}` };
 
-  if (jobId && /^[A-Za-z0-9_-]{6,80}$/.test(jobId) && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(jobId)) {
-    const r = await timed(fetchImpl, `${base}/cancel/${encodeURIComponent(jobId)}`, { method: "POST", headers: auth }).catch((e) => ({ ok: false, status: e.message }));
-    steps.push(`cancel ${jobId}: ${r.ok ? "ok" : `failed (${r.status})`}`);
+  if (shouldCancelJob(rawJobId, tagged)) {
+    const r = await timed(fetchImpl, `${base}/cancel/${encodeURIComponent(rawJobId)}`, { method: "POST", headers: auth }).catch((e) => ({ ok: false, status: e.message }));
+    steps.push(`cancel ${rawJobId}: ${r.ok ? "ok" : `failed (${r.status})`}`);
   }
   const purge = await timed(fetchImpl, `${base}/purge-queue`, { method: "POST", headers: auth }).catch((e) => ({ ok: false, status: e.message }));
   const purgeBody = purge.ok ? await readJson(purge) : {};
@@ -116,6 +129,41 @@ export async function stopRunpodEndpoint(env = process.env, { jobId = "", restor
   }
   const after = await health(endpoint, key, fetchImpl).catch((e) => ({ error: e.message }));
   return { endpoint, steps, health: after };
+}
+
+export async function stopRunpodEndpoint(env = process.env, { jobId = "", restoreDelayMs = 6000 } = {}, deps = {}) {
+  const fetchImpl = deps.fetch || fetch;
+  const sleep = deps.sleep || ((ms) => new Promise((r) => setTimeout(r, ms)));
+  const accounts = listRunpodAccounts(env);
+  if (!accounts.length) missingKey();
+  const parsed = parseRunpodJobId(jobId);
+  if (parsed.tagged && !accounts.some((account) => account.slot === parsed.slot)) {
+    const error = new Error(`That job was started on Runpod ${parsed.slot}, which is not configured on this site.`);
+    error.statusCode = 409;
+    throw error;
+  }
+  const ownsJob = (account) => (parsed.tagged ? account.slot === parsed.slot : account === accounts[0]);
+  const results = await Promise.all(
+    accounts.map((account) =>
+      stopOneAccount(account, {
+        rawJobId: ownsJob(account) ? parsed.rawId : "",
+        tagged: parsed.tagged && ownsJob(account),
+        restoreDelayMs,
+        fetchImpl,
+        sleep,
+      })
+    )
+  );
+  const ownerIndex = Math.max(0, accounts.findIndex((account) => ownsJob(account)));
+  const steps =
+    accounts.length === 1
+      ? results[0].steps
+      : results.flatMap((result, index) => result.steps.map((step) => `${accounts[index].label}: ${step}`));
+  return {
+    endpoint: results[ownerIndex].endpoint,
+    steps,
+    health: results[ownerIndex].health,
+  };
 }
 
 function json(body, status = 200) {

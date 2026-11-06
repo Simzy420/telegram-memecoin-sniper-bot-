@@ -14,9 +14,12 @@
  * the function must not exit 1.
  *
  * Env (site settings, not committed):
- *   RUNPOD_API_KEY       server-side only; required for Generate
- *   RUNPOD_ENDPOINT_ID   required for Generate (swapr-wan-animate)
- *   RUNPOD_ENDPOINT_URL  optional https://api.runpod.ai/v2/<id>
+ *   RUNPOD_API_KEY         account 1, server-side only; required for Generate
+ *   RUNPOD_ENDPOINT_ID     account 1 (swapr-wan-animate, zrmwpir4qzs66s)
+ *   RUNPOD_ENDPOINT_URL    account 1, optional https://api.runpod.ai/v2/<id>
+ *   RUNPOD_API_KEY_2       account 2, optional; paired only with endpoint 2
+ *   RUNPOD_ENDPOINT_ID_2   account 2 (3qu6rstqmkum81)
+ *   RUNPOD_ENDPOINT_URL_2  account 2, optional https://api.runpod.ai/v2/<id>
  *   HF_GENERATE_FALLBACK set true only to send Generate to the Space when Runpod env is absent
  *   HF_TOKEN             used for Extend and /api/video, not the Runpod happy path
  *   URL                  set by Netlify; used to start the background worker
