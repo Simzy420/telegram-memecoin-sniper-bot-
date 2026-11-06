@@ -7,6 +7,7 @@ import { handleResultRequest } from "../server/resultVideo.js";
 import {
   buildRunpodInput,
   decodeVideoBase64,
+  describeRunpodJob,
   explainRunpodFailure,
   extractRunpodVideoBase64,
   isAllowedTemplateVideoUrl,
@@ -208,6 +209,25 @@ describe("Runpod Wan Animate client", () => {
         }),
       /Tap the person/,
     );
+  });
+
+  it("reports GPU time from a finished Runpod job", () => {
+    const described = describeRunpodJob("job-1", {
+      status: "COMPLETED",
+      executionTime: 90_000,
+      delayTime: 5_000,
+      output: { video: Buffer.from("not-a-video").toString("base64") },
+    });
+    assert.equal(described.phase, "error");
+
+    const encoded = tinyMp4().toString("base64");
+    const done = describeRunpodJob("job-2", {
+      status: "COMPLETED",
+      executionTime: 90_000,
+      output: { video: encoded },
+    });
+    assert.equal(done.phase, "done");
+    assert.equal(done.executionTimeMs, 90_000);
   });
 
   it("reads base64 video from output.video and from gifs", () => {

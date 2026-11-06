@@ -520,6 +520,8 @@ export function describeRunpodJob(jobId, body) {
       };
     }
     const url = `/api/result?id=${encodeURIComponent(jobId)}`;
+    const executionTimeMs = Number(body?.executionTime);
+    const delayTimeMs = Number(body?.delayTime);
     return {
       job_id: jobId,
       phase: "done",
@@ -528,6 +530,8 @@ export function describeRunpodJob(jobId, body) {
       status: "Done.",
       session_id: null,
       state: null,
+      executionTimeMs: Number.isFinite(executionTimeMs) && executionTimeMs >= 0 ? executionTimeMs : null,
+      delayTimeMs: Number.isFinite(delayTimeMs) && delayTimeMs >= 0 ? delayTimeMs : null,
     };
   }
   if (isTerminalFailure(status)) {

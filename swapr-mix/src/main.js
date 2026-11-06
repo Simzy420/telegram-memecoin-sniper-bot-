@@ -11,6 +11,7 @@
  * insets them into the corner of that reference image.
  */
 import { inject } from '@vercel/analytics';
+import { clipCompute, formatClipCost } from "../server/clipCost.js";
 import {
   EXTEND_EXPECTED_MS,
   GENERATE_EXPECTED_MS,
@@ -19,7 +20,7 @@ import {
 } from "../server/generateProgress.js";
 import { generateFailureText, publicErrorText } from "../server/gatewayError.js";
 import { generateBlockReason, slotLabel } from "../server/markPairing.js";
-import { isBareMixPrompt, mixStockPrompt } from "../server/mixPoints.js";
+import { MIX_DEFAULT_NEGATIVE, isBareMixPrompt, mixStockPrompt } from "../server/mixPoints.js";
 import { templatePromptText } from "../server/templatePrompt.js";
 import { rewriteSpaceVideoUrl } from "../server/videoUrl.js";
 
@@ -37,8 +38,9 @@ const CDN_BASE =
   "https://huggingface.co/datasets/Simzy/wan22-template-clips/resolve/main/";
 const USE_PROXY = cfg.USE_PROXY === true;
 const GENERATE_WAIT =
-  "The first Generate may take several minutes while the Runpod worker starts. Leave this tab open.";
-const EXTEND_WAIT = "Extend uses the Hugging Face Space and can take several minutes. Leave this tab open.";
+  "The first Generate may take several minutes while the worker starts. You can leave this page and come back.";
+const EXTEND_WAIT = "Extend can take several minutes. You can leave this page and come back.";
+const JOB_KEY = "swapr-mix-pending-job";
 
 let templates = [];
 let selectedId = null;
@@ -80,6 +82,8 @@ const els = {
   propSlots: document.getElementById("prop-slots"),
   propSlotsEmpty: document.getElementById("prop-slots-empty"),
   prompt: document.getElementById("prompt"),
+  negativePrompt: document.getElementById("negative-prompt"),
+  extendNegative: document.getElementById("extend-negative-prompt"),
   gateHint: document.getElementById("gate-hint"),
   btnGen: document.getElementById("btn-generate"),
   genProgress: document.getElementById("gen-progress"),
@@ -89,6 +93,7 @@ const els = {
   genStatus: document.getElementById("gen-status"),
   resultPanel: document.getElementById("result-panel"),
   resultVideo: document.getElementById("result-video"),
+  resultCost: document.getElementById("result-cost"),
   btnDownload: document.getElementById("btn-download"),
   btnSave: document.getElementById("btn-save-photos"),
   balance: document.getElementById("runpod-balance"),
@@ -246,9 +251,13 @@ function syncDefaultPrompt() {
 
 /** Same catalog prompt Swapr writes when a template is selected. */
 function applyTemplatePrompt(template) {
-  if (!els.prompt) return;
-  els.prompt.value = templatePromptText(template);
-  promptFromTemplate = true;
+  if (els.prompt) {
+    els.prompt.value = templatePromptText(template);
+    promptFromTemplate = true;
+  }
+  const negative = String(template?.negative_prompt || "").trim() || MIX_DEFAULT_NEGATIVE;
+  if (els.negativePrompt) els.negativePrompt.value = negative;
+  if (els.extendNegative) els.extendNegative.value = negative;
 }
 
 function refreshMarks() {
@@ -765,13 +774,13 @@ function paintProgress() {
   if (els.genProgressLabel) els.genProgressLabel.textContent = progressLabel(state);
 }
 
-function setBusy(msg, expectedMs = GENERATE_EXPECTED_MS) {
+function setBusy(msg, expectedMs = GENERATE_EXPECTED_MS, startedAt = Date.now()) {
   els.genStatus.textContent = msg || "";
   els.btnGen.disabled = true;
   els.btnExtend.disabled = true;
   els.btnAuto.disabled = true;
   progressExpected = expectedMs;
-  progressStarted = Date.now();
+  progressStarted = startedAt;
   if (els.genProgress) els.genProgress.hidden = false;
   paintProgress();
   window.clearInterval(progressTimer);
@@ -788,7 +797,7 @@ function clearBusy() {
   els.btnAuto.disabled = false;
 }
 
-function showResult(fileOrUrl) {
+function showResult(fileOrUrl, extra) {
   let url = fileOrUrl;
   if (fileOrUrl && typeof fileOrUrl === "object") {
     const nested = fileOrUrl.video && typeof fileOrUrl.video === "object" ? fileOrUrl.video : null;
@@ -803,6 +812,7 @@ function showResult(fileOrUrl) {
   els.resultVideo.play().catch(() => {});
   els.btnDownload.href = lastResultUrl;
   lastResultBlob = null;
+  if (els.resultCost) els.resultCost.textContent = extra?.costLabel || "";
 }
 
 async function resultFile() {
@@ -1026,7 +1036,7 @@ function generateArgs(size) {
     guidance: 1,
     cfg: 1,
     sample_shift: 5,
-    negative: "",
+    negative: els.negativePrompt ? els.negativePrompt.value.trim() : "",
     seed: Math.floor(Math.random() * 1_000_000_000),
     mode: "replace",
     positive_points: positivePoints,
@@ -1040,7 +1050,7 @@ function extendArgs(auto) {
     prompt: els.prompt.value,
     seg_duration: 3.5,
     steps: 4,
-    negative: "",
+    negative: els.extendNegative ? els.extendNegative.value.trim() : "",
     seed: 42,
     randomize: true,
     quality: 6,
@@ -1052,6 +1062,77 @@ function extendArgs(auto) {
   return args;
 }
 
+function readPendingJob() {
+  try {
+    const raw = localStorage.getItem(JOB_KEY);
+    if (!raw) return null;
+    const job = JSON.parse(raw);
+    if (!job || !job.jobId) return null;
+    return job;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingJob(job) {
+  try {
+    localStorage.setItem(JOB_KEY, JSON.stringify(job));
+  } catch {
+    /* private mode can block storage */
+  }
+}
+
+function clearPendingJob() {
+  try {
+    localStorage.removeItem(JOB_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function rememberPendingJob(jobId, apiName) {
+  const existing = readPendingJob();
+  const startedAt = existing && existing.jobId === jobId ? existing.startedAt : Date.now();
+  const ratePerHour = existing && existing.jobId === jobId ? existing.ratePerHour : null;
+  writePendingJob({ jobId, apiName, startedAt, ratePerHour });
+  return startedAt;
+}
+
+async function noteGpuRate() {
+  const pending = readPendingJob();
+  if (!pending || pending.ratePerHour) return;
+  try {
+    const res = await fetch("/api/balance", { cache: "no-store" });
+    const data = await res.json();
+    const rates = [];
+    if (typeof data.spendPerHour === "number") rates.push(data.spendPerHour);
+    for (const account of data.accounts || []) {
+      if (typeof account.spendPerHour === "number") rates.push(account.spendPerHour);
+    }
+    const rate = rates.filter((n) => n > 0).sort((a, b) => b - a)[0];
+    if (!rate) return;
+    const current = readPendingJob();
+    if (current && current.jobId === pending.jobId) writePendingJob({ ...current, ratePerHour: rate });
+  } catch {
+    /* cost falls back to GPU time */
+  }
+}
+
+function costLabelFrom(data) {
+  const pending = readPendingJob();
+  return formatClipCost(clipCompute(data?.executionTimeMs, pending?.ratePerHour));
+}
+
+function notifyClipReady() {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  if (!document.hidden) return;
+  try {
+    new Notification("Swapr Mix", { body: "Your clip is ready." });
+  } catch {
+    /* notifications are optional */
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -1060,10 +1141,13 @@ function sleep(ms) {
 async function pollJob(jobId, apiName) {
   const extend = apiName === "/extend" || apiName === "/auto_extend";
   const wait = extend ? EXTEND_WAIT : GENERATE_WAIT;
-  const queued = extend ? `Queued on the Space… ${wait}` : `Queued on Runpod… ${wait}`;
-  const running = extend ? `Extending on the Space… ${wait}` : `Running Wan Animate on Runpod… ${wait}`;
+  const queued = extend ? `Queued… ${wait}` : `Queued on Runpod… ${wait}`;
+  const running = extend ? `Extending… ${wait}` : `Running Wan Animate on Runpod… ${wait}`;
+  const startedAt = rememberPendingJob(jobId, apiName);
+  progressStarted = startedAt;
   const started = Date.now();
   const limit = 14 * 60 * 1000;
+  let notedRate = Boolean(readPendingJob()?.ratePerHour);
   while (Date.now() - started < limit) {
     await sleep(2500);
     const res = await fetch(`/api/job?id=${encodeURIComponent(jobId)}`);
@@ -1081,14 +1165,26 @@ async function pollJob(jobId, apiName) {
     if (!res.ok) {
       throw new Error(publicErrorText((data && data.error) || text || `Job HTTP ${res.status}`));
     }
-    if (data?.phase === "done") return data;
-    if (data?.phase === "error") throw new Error(publicErrorText(data.error || "Generate failed"));
+    if (data?.phase === "running" && !notedRate) {
+      notedRate = true;
+      noteGpuRate();
+    }
+    if (data?.phase === "done") {
+      data.costLabel = costLabelFrom(data);
+      clearPendingJob();
+      notifyClipReady();
+      return data;
+    }
+    if (data?.phase === "error") {
+      clearPendingJob();
+      throw new Error(publicErrorText(data.error || "Generate failed"));
+    }
     els.genStatus.textContent = data?.phase === "running" ? running : queued;
   }
   throw new Error(
     extend
-      ? "Timed out waiting for Extend. The Space can take several minutes. Wait a minute and try once."
-      : "Timed out waiting for Generate. The first Runpod run can take several minutes while the worker starts. Wait a minute and try once."
+      ? "Still extending. You can leave this page and come back."
+      : "Still generating. You can leave this page and come back."
   );
 }
 
@@ -1142,6 +1238,9 @@ els.btnGen.addEventListener("click", async () => {
     return;
   }
   setBusy(`Queuing Mix on Runpod… ${GENERATE_WAIT}`, GENERATE_EXPECTED_MS);
+  if (typeof Notification !== "undefined" && Notification.permission === "default") {
+    Notification.requestPermission().catch(() => {});
+  }
   try {
     const size = await templateSize(templates.find((t) => t.id === selectedId));
     const target = workerSize(size);
@@ -1163,7 +1262,7 @@ els.btnGen.addEventListener("click", async () => {
         target,
       });
       rememberSession(data);
-      showResult(data.video || data.url);
+      showResult(data.video || data.url, { costLabel: data.costLabel || "" });
       els.genStatus.textContent = statusText(data.status, "Done.");
     } else {
       const { Client } = await import("@gradio/client");
@@ -1207,7 +1306,7 @@ async function extendOnce(auto) {
     if (USE_PROXY) {
       const data = await callSpace(api, { json: args });
       rememberSession(data);
-      showResult(data.video || data.url);
+      showResult(data.video || data.url, { costLabel: data.costLabel || "" });
       els.genStatus.textContent = statusText(data.status, "Extended.");
     } else {
       const { Client } = await import("@gradio/client");
@@ -1327,7 +1426,32 @@ els.btnStop?.addEventListener("click", async () => {
 });
 
 syncDefaultPrompt();
+if (els.negativePrompt && !els.negativePrompt.value.trim()) els.negativePrompt.value = MIX_DEFAULT_NEGATIVE;
+if (els.extendNegative && !els.extendNegative.value.trim()) els.extendNegative.value = MIX_DEFAULT_NEGATIVE;
 refreshBalance();
 setInterval(refreshBalance, 30000);
 updateGenerateEnabled();
 loadCatalog();
+resumePendingJob();
+
+function resumePendingJob() {
+  const pending = readPendingJob();
+  if (!pending?.jobId) return;
+  const extend = pending.apiName === "/extend" || pending.apiName === "/auto_extend";
+  setBusy(
+    extend ? `Still extending… ${EXTEND_WAIT}` : `Still generating… ${GENERATE_WAIT}`,
+    extend ? EXTEND_EXPECTED_MS : GENERATE_EXPECTED_MS,
+    pending.startedAt || Date.now(),
+  );
+  pollJob(pending.jobId, pending.apiName || "/generate")
+    .then((data) => {
+      showResult(data.video || data.url, { costLabel: data.costLabel || "" });
+      els.genStatus.textContent = statusText(data.status, "Done.");
+    })
+    .catch((error) => {
+      els.genStatus.textContent = publicErrorText(error);
+    })
+    .finally(() => {
+      clearBusy();
+    });
+}
