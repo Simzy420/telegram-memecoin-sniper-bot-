@@ -79,7 +79,14 @@
 
       <section class="section">
         <h2>Prompt <span class="muted">(auto-filled, edit if needed)</span></h2>
+        <p class="muted">The template clip drives the motion. Keep this prompt close to that clip so the result follows it.</p>
         <textarea id="prompt" rows="3" placeholder="a person, natural motion, cinematic…">a person, natural motion, cinematic, high quality</textarea>
+        <p class="muted">Seed is the starting number for a clip. Mix picks a new seed every Generate, so each take is different. The same seed would repeat the same take.</p>
+      </section>
+
+      <section class="section">
+        <h2>Negative prompt <span class="muted">(auto-filled)</span></h2>
+        <textarea id="negative-prompt" rows="3" placeholder="blurry, extra limbs, different pose…"></textarea>
       </section>
 
       <section class="section actions">
@@ -91,7 +98,7 @@
           <p id="gen-progress-label" class="muted">About 5:00 left</p>
         </div>
         <p id="gate-hint" class="muted" aria-live="polite"></p>
-        <p class="muted">Uses Wan Animate replace with your SAM marks on Runpod. The first Generate may take several minutes while the worker starts. Leave this tab open.</p>
+        <p class="muted">Uses Wan Animate replace with your SAM marks on Runpod. The first Generate may take several minutes while the worker starts. You can leave this page. Open Mix again and the finished clip will be here.</p>
         <p id="gen-status" class="muted" aria-live="polite"></p>
       </section>
 
@@ -107,6 +114,7 @@
         <h2>Result</h2>
         <div class="card">
           <video id="result-video" playsinline loop controls></video>
+          <p id="result-cost" class="muted"></p>
           <div class="row">
             <a id="btn-download" class="secondary" href="#" download="swapr-mix.mp4">Download</a>
             <button type="button" id="btn-save-photos" class="secondary">Save to Photos</button>
@@ -115,7 +123,10 @@
 
         <details class="extend-box">
           <summary>Extend for a longer clip</summary>
-          <p class="muted">Extend still uses the Hugging Face Space and cannot continue a Runpod clip.</p>
+          <p class="muted">Extend still uses the Hugging Face Space and cannot continue a Runpod clip. You can leave this page and come back.</p>
+          <label class="field">Negative prompt for extend
+            <textarea id="extend-negative-prompt" rows="2" placeholder="blurry, different pose, extra people…"></textarea>
+          </label>
           <label class="field">Target seconds
             <input type="range" id="extend-target" min="8" max="22" value="12" />
             <span id="extend-target-val">12s</span>
@@ -151,7 +162,7 @@
         <li><strong>Mark person</strong> — tap green once on each person to replace. Person 1, Person 2, and so on match the numbers on the dots.</li>
         <li><strong>Mark prop</strong> — tap red once on each prop to replace (popsicle, cup, phone). Leave this out if you only want people replaced.</li>
         <li><strong>Upload a face per person</strong> — fill every Person slot, and every Prop slot you marked.</li>
-        <li>Tap <strong>Generate Mix</strong>. Leave the tab open while Runpod runs.</li>
+        <li>Tap <strong>Generate Mix</strong>. You can leave this page. Open Mix again and the finished clip will be here.</li>
       </ol>
 
       <h3>Templates</h3>

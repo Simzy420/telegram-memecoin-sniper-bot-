@@ -633,7 +633,12 @@ describe("phone UI wiring", () => {
     assert.match(main, /progressLabel/);
     assert.match(main, /image\/\*,video\/\*/);
     assert.match(main, /frameFromVideo/);
-    assert.match(main, /steps: 8/);
+    assert.match(page, /id="negative-prompt"/);
+    assert.match(page, /extend-negative-prompt/);
+    assert.match(page, /You can leave this page/);
+    assert.match(main, /swapr-mix-pending-job/);
+    assert.match(main, /executionTimeMs/);
+    assert.match(main, /formatClipCost/);
     assert.doesNotMatch(page, /Mark keep|objects to keep|props to keep|Keep the props/);
     const toml = readFileSync(new URL("../netlify.toml", import.meta.url), "utf8");
     assert.match(toml, /\[functions\."generate-background"\]/);
