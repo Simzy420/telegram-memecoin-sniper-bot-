@@ -351,6 +351,22 @@ textarea {
 }
 
 .actions { text-align: center; }
+.gen-progress { margin: 0.85rem 0 0.35rem; }
+.gen-progress-track {
+  height: 12px;
+  border-radius: 999px;
+  background: #1b1b26;
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+.gen-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #4ade80, var(--accent), var(--accent-2));
+  transition: width 0.8s linear;
+}
+.gen-progress-label { margin: 0.4rem 0 0; }
 button, a.secondary, a.primary {
   font: inherit;
   border: none;
@@ -515,4 +531,5 @@ dialog.howto code {
 
 @media (prefers-reduced-motion: reduce) {
   .tcard video { animation: none; }
+  .gen-progress-fill { transition: none; }
 }

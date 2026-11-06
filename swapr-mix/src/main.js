@@ -11,9 +11,17 @@
  * insets them into the corner of that reference image.
  */
 import { inject } from '@vercel/analytics';
+import { clipCompute, formatClipCost } from "../server/clipCost.js";
+import {
+  EXTEND_EXPECTED_MS,
+  GENERATE_EXPECTED_MS,
+  generateProgress,
+  progressLabel,
+} from "../server/generateProgress.js";
 import { generateFailureText, publicErrorText } from "../server/gatewayError.js";
 import { generateBlockReason, slotLabel } from "../server/markPairing.js";
-import { isBareMixPrompt, mixStockPrompt } from "../server/mixPoints.js";
+import { MIX_DEFAULT_NEGATIVE, isBareMixPrompt, mixStockPrompt } from "../server/mixPoints.js";
+import { templatePromptText } from "../server/templatePrompt.js";
 import { rewriteSpaceVideoUrl } from "../server/videoUrl.js";
 
 // Initialize Vercel Web Analytics
@@ -30,8 +38,9 @@ const CDN_BASE =
   "https://huggingface.co/datasets/Simzy/wan22-template-clips/resolve/main/";
 const USE_PROXY = cfg.USE_PROXY === true;
 const GENERATE_WAIT =
-  "The first Generate may take several minutes while the Runpod worker starts. Leave this tab open.";
-const EXTEND_WAIT = "Extend uses the Hugging Face Space and can take several minutes. Leave this tab open.";
+  "The first Generate may take several minutes while the worker starts. You can leave this page and come back.";
+const EXTEND_WAIT = "Extend can take several minutes. You can leave this page and come back.";
+const JOB_KEY = "swapr-mix-pending-job";
 
 let templates = [];
 let selectedId = null;
@@ -73,11 +82,18 @@ const els = {
   propSlots: document.getElementById("prop-slots"),
   propSlotsEmpty: document.getElementById("prop-slots-empty"),
   prompt: document.getElementById("prompt"),
+  negativePrompt: document.getElementById("negative-prompt"),
+  extendNegative: document.getElementById("extend-negative-prompt"),
   gateHint: document.getElementById("gate-hint"),
   btnGen: document.getElementById("btn-generate"),
+  genProgress: document.getElementById("gen-progress"),
+  genProgressTrack: document.getElementById("gen-progress-track"),
+  genProgressFill: document.getElementById("gen-progress-fill"),
+  genProgressLabel: document.getElementById("gen-progress-label"),
   genStatus: document.getElementById("gen-status"),
   resultPanel: document.getElementById("result-panel"),
   resultVideo: document.getElementById("result-video"),
+  resultCost: document.getElementById("result-cost"),
   btnDownload: document.getElementById("btn-download"),
   btnSave: document.getElementById("btn-save-photos"),
   balance: document.getElementById("runpod-balance"),
@@ -94,6 +110,10 @@ const els = {
 
 const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 let playObserver = null;
+let promptFromTemplate = false;
+let progressTimer = 0;
+let progressStarted = 0;
+let progressExpected = GENERATE_EXPECTED_MS;
 
 function videoUrl(t) {
   if (t.video_url) return t.video_url;
@@ -223,10 +243,21 @@ function drawMaskCanvas() {
 }
 
 function syncDefaultPrompt() {
-  if (!els.prompt) return;
+  if (!els.prompt || promptFromTemplate) return;
   const current = els.prompt.value.trim();
   if (!isBareMixPrompt(current)) return;
   els.prompt.value = mixStockPrompt(propPoints.length > 0, positivePoints.length);
+}
+
+/** Same catalog prompt Swapr writes when a template is selected. */
+function applyTemplatePrompt(template) {
+  if (els.prompt) {
+    els.prompt.value = templatePromptText(template);
+    promptFromTemplate = true;
+  }
+  const negative = String(template?.negative_prompt || "").trim() || MIX_DEFAULT_NEGATIVE;
+  if (els.negativePrompt) els.negativePrompt.value = negative;
+  if (els.extendNegative) els.extendNegative.value = negative;
 }
 
 function refreshMarks() {
@@ -335,10 +366,27 @@ function removeMark(kind, index) {
   refreshMarks();
 }
 
+function keepLooping(video) {
+  if (!video) return;
+  video.loop = true;
+  video.setAttribute("loop", "");
+  if (video.dataset.loopArmed === "1") return;
+  video.dataset.loopArmed = "1";
+  video.addEventListener("ended", () => {
+    try {
+      video.currentTime = 0;
+    } catch {
+      /* some clips reject a seek exactly at the end */
+    }
+    const pending = video.play();
+    if (pending && typeof pending.catch === "function") pending.catch(() => {});
+  });
+}
+
 function armVideo(vid) {
   vid.muted = true;
   vid.defaultMuted = true;
-  vid.loop = true;
+  keepLooping(vid);
   vid.playsInline = true;
   vid.autoplay = true;
   vid.setAttribute("muted", "");
@@ -402,7 +450,7 @@ function focusUpload() {
   els.uploadSection.classList.add("is-ready");
   els.uploadSection.setAttribute("aria-disabled", "false");
   els.uploadHint.textContent =
-    "Upload one face for each green mark (Person 1, Person 2, …) and one still for each red prop mark.";
+    "Upload a photo or video for each green mark (Person 1, Person 2, …) and one still for each red prop mark.";
   els.uploadSection.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "center" });
   els.uploadSection.focus({ preventScroll: true });
   renderMarkSlots();
@@ -482,6 +530,7 @@ function selectTemplate(id, opts = {}) {
     }
   });
   if (!t) {
+    promptFromTemplate = false;
     lockUpload();
     if (els.maskSection) {
       els.maskSection.hidden = true;
@@ -493,6 +542,7 @@ function selectTemplate(id, opts = {}) {
   els.selectedPanel.hidden = false;
   els.selectedTitle.textContent = t.title || t.id;
   els.selectedDesc.textContent = t.description || "";
+  applyTemplatePrompt(t);
   syncPlayback();
   loadMaskFrame(t).catch((e) => {
     if (els.maskStatus) els.maskStatus.textContent = `Could not load frame: ${e.message}`;
@@ -508,15 +558,91 @@ function imageFiles(fileList) {
   return [...(fileList || [])].filter((file) => file && String(file.type || "").startsWith("image/"));
 }
 
+function isVideoFile(file) {
+  if (!file) return false;
+  const type = String(file.type || "");
+  if (type.startsWith("video/")) return true;
+  return /\.(mp4|mov|m4v|webm)$/i.test(file.name || "");
+}
+
+function faceMediaFiles(fileList) {
+  return [...(fileList || [])].filter((file) => file && (String(file.type || "").startsWith("image/") || isVideoFile(file)));
+}
+
+/** A chosen video becomes one sharp frame so that person can be face-swapped onto the template. */
+async function frameFromVideo(file) {
+  const url = URL.createObjectURL(file);
+  const video = document.createElement("video");
+  video.muted = true;
+  video.playsInline = true;
+  video.preload = "auto";
+  video.src = url;
+  try {
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error("That video took too long to open.")), 15000);
+      video.addEventListener(
+        "loadeddata",
+        () => {
+          clearTimeout(timer);
+          resolve();
+        },
+        { once: true },
+      );
+      video.addEventListener(
+        "error",
+        () => {
+          clearTimeout(timer);
+          reject(new Error("Could not read that video."));
+        },
+        { once: true },
+      );
+    });
+    const duration = Number.isFinite(video.duration) ? video.duration : 0;
+    const at = duration > 0.4 ? Math.min(0.8, duration * 0.25) : 0;
+    if (at > 0) {
+      await new Promise((resolve) => {
+        video.addEventListener("seeked", resolve, { once: true });
+        setTimeout(resolve, 700);
+        try {
+          video.currentTime = at;
+        } catch {
+          resolve();
+        }
+      });
+    }
+    const canvas = document.createElement("canvas");
+    canvas.width = video.videoWidth || 480;
+    canvas.height = video.videoHeight || 832;
+    canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+    const still = await canvasToJpeg(canvas, "face-from-video.jpg", 0.95);
+    if (!still) throw new Error("Could not read a frame from that video.");
+    return still;
+  } finally {
+    URL.revokeObjectURL(url);
+    video.removeAttribute("src");
+    video.load();
+  }
+}
+
 function revokePreviews(kind) {
   for (const url of previewUrls[kind]) URL.revokeObjectURL(url);
   previewUrls[kind] = [];
 }
 
-function setSlotFile(kind, index, fileList) {
+async function setSlotFile(kind, index, fileList) {
   if (uploadsLocked()) return;
-  const file = imageFiles(fileList)[0];
-  if (!file) return;
+  const picked = (kind === "prop" ? imageFiles(fileList) : faceMediaFiles(fileList))[0];
+  if (!picked) return;
+  let file = picked;
+  if (kind !== "prop" && isVideoFile(picked)) {
+    if (els.maskStatus) els.maskStatus.textContent = `Reading a face frame from your video for ${slotLabel(kind, index)}…`;
+    try {
+      file = await frameFromVideo(picked);
+    } catch (error) {
+      if (els.gateHint) els.gateHint.textContent = error instanceof Error ? error.message : "Could not read that video.";
+      return;
+    }
+  }
   const files = kind === "prop" ? propFiles : personFiles;
   if (index < 0 || index >= files.length) return;
   files[index] = file;
@@ -560,11 +686,11 @@ function renderKindSlots(kind) {
     zone.className = `upload-zone ${isProp ? "prop-zone" : "person-zone"}${file ? " has-file" : ""}`;
     const input = document.createElement("input");
     input.type = "file";
-    input.accept = "image/*";
+    input.accept = isProp ? "image/*" : "image/*,video/*";
     input.hidden = true;
     input.disabled = uploadsLocked();
     input.className = isProp ? "prop-input" : "photo-input";
-    input.setAttribute("aria-label", `${isProp ? "Prop still" : "Face"} for ${label}`);
+    input.setAttribute("aria-label", isProp ? `Prop still for ${label}` : `Photo or video for ${label}`);
     input.addEventListener("change", () => {
       if (input.files && input.files.length) setSlotFile(kind, index, input.files);
     });
@@ -590,10 +716,10 @@ function renderKindSlots(kind) {
     icon.setAttribute("aria-hidden", "true");
     icon.textContent = "⬆";
     const strong = document.createElement("strong");
-    strong.textContent = isProp ? `Upload still for ${label}` : `Upload face for ${label}`;
+    strong.textContent = isProp ? `Upload still for ${label}` : `Upload photo or video for ${label}`;
     const hint = document.createElement("span");
     hint.className = "muted";
-    hint.textContent = "One still · JPG / PNG";
+    hint.textContent = isProp ? "One still · JPG / PNG" : "Photos and videos · a video uses one frame as the face";
     inner.append(icon, strong, hint);
     zone.append(input, inner);
 
@@ -638,20 +764,40 @@ els.extendTarget.addEventListener("input", () => {
   els.extendTargetVal.textContent = `${els.extendTarget.value}s`;
 });
 
-function setBusy(msg) {
+function paintProgress() {
+  const state = generateProgress(Date.now() - progressStarted, progressExpected);
+  if (els.genProgressFill) els.genProgressFill.style.width = `${state.percent}%`;
+  if (els.genProgressTrack) {
+    els.genProgressTrack.setAttribute("aria-valuenow", String(state.percent));
+    els.genProgressTrack.setAttribute("aria-valuetext", progressLabel(state));
+  }
+  if (els.genProgressLabel) els.genProgressLabel.textContent = progressLabel(state);
+}
+
+function setBusy(msg, expectedMs = GENERATE_EXPECTED_MS, startedAt = Date.now()) {
   els.genStatus.textContent = msg || "";
   els.btnGen.disabled = true;
   els.btnExtend.disabled = true;
   els.btnAuto.disabled = true;
+  progressExpected = expectedMs;
+  progressStarted = startedAt;
+  if (els.genProgress) els.genProgress.hidden = false;
+  paintProgress();
+  window.clearInterval(progressTimer);
+  progressTimer = window.setInterval(paintProgress, 1000);
 }
 
 function clearBusy() {
+  window.clearInterval(progressTimer);
+  progressTimer = 0;
+  if (els.genProgressFill) els.genProgressFill.style.width = "100%";
+  if (els.genProgress) els.genProgress.hidden = true;
   updateGenerateEnabled();
   els.btnExtend.disabled = false;
   els.btnAuto.disabled = false;
 }
 
-function showResult(fileOrUrl) {
+function showResult(fileOrUrl, extra) {
   let url = fileOrUrl;
   if (fileOrUrl && typeof fileOrUrl === "object") {
     const nested = fileOrUrl.video && typeof fileOrUrl.video === "object" ? fileOrUrl.video : null;
@@ -661,10 +807,12 @@ function showResult(fileOrUrl) {
   url = rewriteSpaceVideoUrl(url, SPACE);
   lastResultUrl = url;
   els.resultPanel.hidden = false;
+  keepLooping(els.resultVideo);
   els.resultVideo.src = lastResultUrl;
   els.resultVideo.play().catch(() => {});
   els.btnDownload.href = lastResultUrl;
   lastResultBlob = null;
+  if (els.resultCost) els.resultCost.textContent = extra?.costLabel || "";
 }
 
 async function resultFile() {
@@ -720,7 +868,7 @@ function closeBitmaps(bitmaps) {
   }
 }
 
-async function canvasToJpeg(canvas, name) {
+async function canvasToJpeg(canvas, name, quality = 0.95) {
   const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
   if (!blob) return null;
   return new File([blob], name, { type: "image/jpeg" });
@@ -884,11 +1032,11 @@ function generateArgs(size) {
     max_seconds: 3,
     height: target.height,
     width: target.width,
-    steps: 10,
-    guidance: 2,
-    cfg: 2,
+    steps: 8,
+    guidance: 1,
+    cfg: 1,
     sample_shift: 5,
-    negative: "",
+    negative: els.negativePrompt ? els.negativePrompt.value.trim() : "",
     seed: Math.floor(Math.random() * 1_000_000_000),
     mode: "replace",
     positive_points: positivePoints,
@@ -902,7 +1050,7 @@ function extendArgs(auto) {
     prompt: els.prompt.value,
     seg_duration: 3.5,
     steps: 4,
-    negative: "",
+    negative: els.extendNegative ? els.extendNegative.value.trim() : "",
     seed: 42,
     randomize: true,
     quality: 6,
@@ -914,6 +1062,77 @@ function extendArgs(auto) {
   return args;
 }
 
+function readPendingJob() {
+  try {
+    const raw = localStorage.getItem(JOB_KEY);
+    if (!raw) return null;
+    const job = JSON.parse(raw);
+    if (!job || !job.jobId) return null;
+    return job;
+  } catch {
+    return null;
+  }
+}
+
+function writePendingJob(job) {
+  try {
+    localStorage.setItem(JOB_KEY, JSON.stringify(job));
+  } catch {
+    /* private mode can block storage */
+  }
+}
+
+function clearPendingJob() {
+  try {
+    localStorage.removeItem(JOB_KEY);
+  } catch {
+    /* ignore */
+  }
+}
+
+function rememberPendingJob(jobId, apiName) {
+  const existing = readPendingJob();
+  const startedAt = existing && existing.jobId === jobId ? existing.startedAt : Date.now();
+  const ratePerHour = existing && existing.jobId === jobId ? existing.ratePerHour : null;
+  writePendingJob({ jobId, apiName, startedAt, ratePerHour });
+  return startedAt;
+}
+
+async function noteGpuRate() {
+  const pending = readPendingJob();
+  if (!pending || pending.ratePerHour) return;
+  try {
+    const res = await fetch("/api/balance", { cache: "no-store" });
+    const data = await res.json();
+    const rates = [];
+    if (typeof data.spendPerHour === "number") rates.push(data.spendPerHour);
+    for (const account of data.accounts || []) {
+      if (typeof account.spendPerHour === "number") rates.push(account.spendPerHour);
+    }
+    const rate = rates.filter((n) => n > 0).sort((a, b) => b - a)[0];
+    if (!rate) return;
+    const current = readPendingJob();
+    if (current && current.jobId === pending.jobId) writePendingJob({ ...current, ratePerHour: rate });
+  } catch {
+    /* cost falls back to GPU time */
+  }
+}
+
+function costLabelFrom(data) {
+  const pending = readPendingJob();
+  return formatClipCost(clipCompute(data?.executionTimeMs, pending?.ratePerHour));
+}
+
+function notifyClipReady() {
+  if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
+  if (!document.hidden) return;
+  try {
+    new Notification("Swapr Mix", { body: "Your clip is ready." });
+  } catch {
+    /* notifications are optional */
+  }
+}
+
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -922,10 +1141,13 @@ function sleep(ms) {
 async function pollJob(jobId, apiName) {
   const extend = apiName === "/extend" || apiName === "/auto_extend";
   const wait = extend ? EXTEND_WAIT : GENERATE_WAIT;
-  const queued = extend ? `Queued on the Space… ${wait}` : `Queued on Runpod… ${wait}`;
-  const running = extend ? `Extending on the Space… ${wait}` : `Running Wan Animate on Runpod… ${wait}`;
+  const queued = extend ? `Queued… ${wait}` : `Queued on Runpod… ${wait}`;
+  const running = extend ? `Extending… ${wait}` : `Running Wan Animate on Runpod… ${wait}`;
+  const startedAt = rememberPendingJob(jobId, apiName);
+  progressStarted = startedAt;
   const started = Date.now();
   const limit = 14 * 60 * 1000;
+  let notedRate = Boolean(readPendingJob()?.ratePerHour);
   while (Date.now() - started < limit) {
     await sleep(2500);
     const res = await fetch(`/api/job?id=${encodeURIComponent(jobId)}`);
@@ -943,14 +1165,26 @@ async function pollJob(jobId, apiName) {
     if (!res.ok) {
       throw new Error(publicErrorText((data && data.error) || text || `Job HTTP ${res.status}`));
     }
-    if (data?.phase === "done") return data;
-    if (data?.phase === "error") throw new Error(publicErrorText(data.error || "Generate failed"));
+    if (data?.phase === "running" && !notedRate) {
+      notedRate = true;
+      noteGpuRate();
+    }
+    if (data?.phase === "done") {
+      data.costLabel = costLabelFrom(data);
+      clearPendingJob();
+      notifyClipReady();
+      return data;
+    }
+    if (data?.phase === "error") {
+      clearPendingJob();
+      throw new Error(publicErrorText(data.error || "Generate failed"));
+    }
     els.genStatus.textContent = data?.phase === "running" ? running : queued;
   }
   throw new Error(
     extend
-      ? "Timed out waiting for Extend. The Space can take several minutes. Wait a minute and try once."
-      : "Timed out waiting for Generate. The first Runpod run can take several minutes while the worker starts. Wait a minute and try once."
+      ? "Still extending. You can leave this page and come back."
+      : "Still generating. You can leave this page and come back."
   );
 }
 
@@ -1003,7 +1237,10 @@ els.btnGen.addEventListener("click", async () => {
     if (els.gateHint) els.gateHint.textContent = blocked;
     return;
   }
-  setBusy(`Queuing Mix on Runpod… ${GENERATE_WAIT}`);
+  setBusy(`Queuing Mix on Runpod… ${GENERATE_WAIT}`, GENERATE_EXPECTED_MS);
+  if (typeof Notification !== "undefined" && Notification.permission === "default") {
+    Notification.requestPermission().catch(() => {});
+  }
   try {
     const size = await templateSize(templates.find((t) => t.id === selectedId));
     const target = workerSize(size);
@@ -1025,7 +1262,7 @@ els.btnGen.addEventListener("click", async () => {
         target,
       });
       rememberSession(data);
-      showResult(data.video || data.url);
+      showResult(data.video || data.url, { costLabel: data.costLabel || "" });
       els.genStatus.textContent = statusText(data.status, "Done.");
     } else {
       const { Client } = await import("@gradio/client");
@@ -1055,7 +1292,7 @@ async function extendOnce(auto) {
     els.genStatus.textContent = "Generate a clip first.";
     return;
   }
-  setBusy(auto ? `Auto-extending on the Space… ${EXTEND_WAIT}` : `Extending on the Space… ${EXTEND_WAIT}`);
+  setBusy(auto ? `Auto-extending on the Space… ${EXTEND_WAIT}` : `Extending on the Space… ${EXTEND_WAIT}`, EXTEND_EXPECTED_MS);
   try {
     const api = auto ? "/auto_extend" : "/extend";
     if (!sessionId) {
@@ -1069,7 +1306,7 @@ async function extendOnce(auto) {
     if (USE_PROXY) {
       const data = await callSpace(api, { json: args });
       rememberSession(data);
-      showResult(data.video || data.url);
+      showResult(data.video || data.url, { costLabel: data.costLabel || "" });
       els.genStatus.textContent = statusText(data.status, "Extended.");
     } else {
       const { Client } = await import("@gradio/client");
@@ -1189,7 +1426,32 @@ els.btnStop?.addEventListener("click", async () => {
 });
 
 syncDefaultPrompt();
+if (els.negativePrompt && !els.negativePrompt.value.trim()) els.negativePrompt.value = MIX_DEFAULT_NEGATIVE;
+if (els.extendNegative && !els.extendNegative.value.trim()) els.extendNegative.value = MIX_DEFAULT_NEGATIVE;
 refreshBalance();
 setInterval(refreshBalance, 30000);
 updateGenerateEnabled();
 loadCatalog();
+resumePendingJob();
+
+function resumePendingJob() {
+  const pending = readPendingJob();
+  if (!pending?.jobId) return;
+  const extend = pending.apiName === "/extend" || pending.apiName === "/auto_extend";
+  setBusy(
+    extend ? `Still extending… ${EXTEND_WAIT}` : `Still generating… ${GENERATE_WAIT}`,
+    extend ? EXTEND_EXPECTED_MS : GENERATE_EXPECTED_MS,
+    pending.startedAt || Date.now(),
+  );
+  pollJob(pending.jobId, pending.apiName || "/generate")
+    .then((data) => {
+      showResult(data.video || data.url, { costLabel: data.costLabel || "" });
+      els.genStatus.textContent = statusText(data.status, "Done.");
+    })
+    .catch((error) => {
+      els.genStatus.textContent = publicErrorText(error);
+    })
+    .finally(() => {
+      clearBusy();
+    });
+}
