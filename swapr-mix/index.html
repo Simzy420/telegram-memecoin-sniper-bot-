@@ -4,6 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <meta name="theme-color" content="#0b0b0f" />
+    <meta name="swapr-mix-version" content="1.1.0" />
     <title>Swapr Mix — replace people and props</title>
     <link rel="stylesheet" href="/src/styles.css" />
     <script src="/config.js"></script>
@@ -89,7 +90,9 @@
       </section>
 
       <section class="section runpod-box">
-        <p id="runpod-balance" class="muted" aria-live="polite">Runpod balance…</p>
+        <div id="runpod-balance" class="runpod-balances" aria-live="polite">
+          <p class="balance-line muted">Runpod balance…</p>
+        </div>
         <button type="button" id="btn-stop-gpu" class="secondary">Stop GPU</button>
         <p id="stop-status" class="muted" aria-live="polite"></p>
       </section>
@@ -119,7 +122,7 @@
       </section>
 
       <footer class="foot muted">
-        Swapr Mix · replace marked people and props · original Swapr left as-is
+        Swapr Mix · v1.1.0 · replace marked people and props · original Swapr left as-is
       </footer>
     </div>
 

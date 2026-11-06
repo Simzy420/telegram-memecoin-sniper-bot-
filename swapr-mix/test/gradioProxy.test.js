@@ -612,6 +612,14 @@ describe("phone UI wiring", () => {
     assert.match(page, /Mark prop/);
     assert.match(page, /Green dot/);
     assert.match(page, /Red dot/);
+    assert.match(page, /id="runpod-balance"/);
+    assert.match(page, /swapr-mix-version" content="1\.1\.0"/);
+    assert.match(page, /v1\.1\.0/);
+    assert.match(main, /https:\/\/console\.runpod\.io\/user\/billing/);
+    assert.match(main, /target = "_blank"/);
+    assert.match(main, /rel = "noopener"/);
+    assert.match(main, /Buy credit/);
+    assert.match(main, /balance < 1/);
     assert.match(page, /person-slots/);
     assert.match(page, /prop-slots/);
     assert.match(page, /Person 1 is the first/);

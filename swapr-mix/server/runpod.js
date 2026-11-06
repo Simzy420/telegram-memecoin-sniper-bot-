@@ -43,8 +43,14 @@ const RUNPOD_DEFAULTS = {
 const CREDIT_RE = /credit|insufficient|billing|payment required|out of funds|balance/i;
 const AUTH_RE = /unauthorized|invalid api key|forbidden|api key/i;
 
-/** swapr-wan-animate. Used when the API key is set and RUNPOD_ENDPOINT_ID is empty. */
+/** swapr-wan-animate on account 1. Used when the API key is set and RUNPOD_ENDPOINT_ID is empty. */
 export const DEFAULT_ANIMATE_ENDPOINT_ID = "zrmwpir4qzs66s";
+/** swapr-wan-animate on account 2. Used only when RUNPOD_API_KEY_2 is set and RUNPOD_ENDPOINT_ID_2 is empty. */
+export const DEFAULT_ANIMATE_ENDPOINT_ID_2 = "3qu6rstqmkum81";
+const BALANCE_TTL_MS = 30_000;
+const GRAPHQL_URL = "https://api.runpod.io/graphql";
+const BALANCE_QUERY = "query { myself { clientBalance currentSpendPerHr } }";
+const balanceCache = new Map();
 
 const MAX_STILL_BYTES = 2_000_000;
 
@@ -61,13 +67,16 @@ export function runpodEndpointId(env = {}) {
 }
 
 export function runpodConfigured(env = {}) {
-  return Boolean(String(env.RUNPOD_API_KEY || "").trim() && runpodEndpointId(env));
+  return listRunpodAccounts(env).length > 0;
 }
 
-export function runpodEndpoint(env = {}) {
-  const id = runpodEndpointId(env);
+/**
+ * Keep a configured URL only when it is this account's own api.runpod.ai endpoint.
+ * A URL for the other account falls back to https://api.runpod.ai/v2/<id>.
+ */
+export function sanitizeRunpodEndpoint(id, rawUrl) {
   const fallback = id ? `https://api.runpod.ai/v2/${id}` : "";
-  const raw = String(env.RUNPOD_ENDPOINT_URL || "").trim();
+  const raw = String(rawUrl || "").trim();
   if (!raw) return fallback;
   try {
     const parsed = new URL(raw);
@@ -76,10 +85,155 @@ export function runpodEndpoint(env = {}) {
     parsed.search = "";
     parsed.username = "";
     parsed.password = "";
-    return parsed.toString().replace(/\/$/, "").replace(/\/(?:run|runsync|status)$/i, "");
+    const cleaned = parsed.toString().replace(/\/$/, "").replace(/\/(?:run|runsync|status)$/i, "");
+    if (id && !cleaned.endsWith(`/${id}`)) return fallback;
+    return cleaned;
   } catch {
     return fallback;
   }
+}
+
+export function runpodEndpoint(env = {}) {
+  return sanitizeRunpodEndpoint(runpodEndpointId(env), env.RUNPOD_ENDPOINT_URL);
+}
+
+const ACCOUNT_DEFS = [
+  {
+    slot: "1",
+    label: "Runpod 1",
+    key: "RUNPOD_API_KEY",
+    id: "RUNPOD_ENDPOINT_ID",
+    url: "RUNPOD_ENDPOINT_URL",
+    fallbackId: DEFAULT_ANIMATE_ENDPOINT_ID,
+  },
+  {
+    slot: "2",
+    label: "Runpod 2",
+    key: "RUNPOD_API_KEY_2",
+    id: "RUNPOD_ENDPOINT_ID_2",
+    url: "RUNPOD_ENDPOINT_URL_2",
+    fallbackId: DEFAULT_ANIMATE_ENDPOINT_ID_2,
+  },
+];
+
+/** Accounts whose API key is set. Each key is paired only with its own endpoint. */
+export function listRunpodAccounts(env = {}) {
+  const accounts = [];
+  for (const def of ACCOUNT_DEFS) {
+    const apiKey = String(env[def.key] || "").trim();
+    if (!apiKey) continue;
+    const endpointId = String(env[def.id] || "").trim() || def.fallbackId;
+    const endpoint = sanitizeRunpodEndpoint(endpointId, env[def.url]);
+    if (!endpointId || !endpoint) continue;
+    accounts.push({ slot: def.slot, label: def.label, apiKey, endpointId, endpoint });
+  }
+  return accounts;
+}
+
+export function clearRunpodBalanceCache() {
+  balanceCache.clear();
+}
+
+export async function queryRunpodBalance(apiKey, deps = {}) {
+  const fetchImpl = deps.fetch || fetch;
+  const timeoutMs = deps.balanceTimeoutMs ?? 10000;
+  let response;
+  try {
+    response = await fetchWithTimeout(
+      fetchImpl,
+      GRAPHQL_URL,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: `Bearer ${apiKey}`,
+        },
+        body: JSON.stringify({ query: BALANCE_QUERY }),
+      },
+      timeoutMs
+    );
+  } catch (error) {
+    const timedOut = error?.name === "TimeoutError" || error?.name === "AbortError";
+    throw new Error(timedOut ? "Runpod balance timed out." : "Could not reach Runpod balance.");
+  }
+  const text = typeof response.text === "function" ? await response.text() : "";
+  let body = {};
+  try {
+    body = text ? JSON.parse(text) : {};
+  } catch {
+    body = {};
+  }
+  if (!response.ok || body.errors?.length) {
+    const message = body.errors?.map((entry) => entry.message).join("; ") || `Runpod GraphQL HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  const me = body.data?.myself || {};
+  return {
+    balance: typeof me.clientBalance === "number" ? me.clientBalance : null,
+    spendPerHour: typeof me.currentSpendPerHr === "number" ? me.currentSpendPerHr : null,
+    at: new Date().toISOString(),
+  };
+}
+
+export async function cachedRunpodBalance(apiKey, deps = {}) {
+  const cache = deps.cache || balanceCache;
+  const now = typeof deps.now === "function" ? deps.now() : Date.now();
+  const ttl = Number.isFinite(deps.balanceTtlMs) ? deps.balanceTtlMs : BALANCE_TTL_MS;
+  const hit = cache.get(apiKey);
+  if (hit && now - hit.storedAt < ttl) return hit.value;
+  const value = await queryRunpodBalance(apiKey, deps);
+  cache.set(apiKey, { storedAt: now, value });
+  return value;
+}
+
+async function rankAccountsByBalance(accounts, deps) {
+  const scored = await Promise.all(
+    accounts.map(async (account) => {
+      try {
+        const info = await cachedRunpodBalance(account.apiKey, deps);
+        const balance = typeof info.balance === "number" ? info.balance : Number.NEGATIVE_INFINITY;
+        return { account, balance };
+      } catch {
+        return { account, balance: Number.NEGATIVE_INFINITY };
+      }
+    })
+  );
+  scored.sort((a, b) => b.balance - a.balance || Number(a.account.slot) - Number(b.account.slot));
+  return scored.map((row) => row.account);
+}
+
+const JOB_TAG = /^rp([12])_([A-Za-z0-9_-]{6,80})$/;
+
+/** Prefix the Runpod id so status and cancel stay on the account that accepted /run. */
+export function tagRunpodJobId(slot, rawId, enabled) {
+  if (!enabled) return rawId;
+  return `rp${slot}_${rawId}`;
+}
+
+export function parseRunpodJobId(value) {
+  const text = String(value || "");
+  const match = JOB_TAG.exec(text);
+  if (!match) return { slot: "", rawId: text, tagged: false };
+  return { slot: match[1], rawId: match[2], tagged: true };
+}
+
+export function resolveRunpodAccount(env, jobId) {
+  const accounts = listRunpodAccounts(env);
+  const parsed = parseRunpodJobId(jobId);
+  if (!accounts.length) return { account: null, ...parsed, missingSlot: "" };
+  if (parsed.tagged) {
+    const account = accounts.find((entry) => entry.slot === parsed.slot) || null;
+    return { account, ...parsed, missingSlot: account ? "" : parsed.slot };
+  }
+  const account = accounts.find((entry) => entry.slot === "1") || accounts[0];
+  return { account, ...parsed, missingSlot: "" };
+}
+
+export function isRunpodCreditError(error) {
+  if (!error) return false;
+  if (error.statusCode === 402 || error.credit) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return CREDIT_RE.test(message);
 }
 
 export function resultVideoKey(jobId) {
@@ -322,7 +476,7 @@ function isTerminalFailure(status) {
 }
 
 export function isJobId(value) {
-  return /^[A-Za-z0-9_-]{6,80}$/.test(String(value || ""));
+  return /^[A-Za-z0-9_-]{6,96}$/.test(String(value || ""));
 }
 
 function statusError(message, statusCode) {
@@ -436,21 +590,15 @@ async function runpodRequest(url, { apiKey, fetchImpl, method = "GET", body, tim
   return { response, text, json };
 }
 
-function requireRunpod(env) {
-  const endpoint = runpodEndpoint(env);
-  const apiKey = String(env.RUNPOD_API_KEY || "").trim();
-  if (!endpoint || !apiKey) {
-    throw new Error("Generate uses Runpod, but RUNPOD_API_KEY or RUNPOD_ENDPOINT_ID is missing.");
-  }
-  return { endpoint, apiKey };
+function missingRunpodError() {
+  return new Error("Generate uses Runpod, but RUNPOD_API_KEY or RUNPOD_ENDPOINT_ID is missing.");
 }
 
-export async function startRunpodJob(env, input, deps = {}) {
-  const { endpoint, apiKey } = requireRunpod(env);
+async function submitToAccount(account, input, deps, tag) {
   const fetchImpl = deps.fetch || fetch;
   const timeoutMs = Math.min(30000, deps.timeoutMs ?? 30000);
-  const submitted = await runpodRequest(`${endpoint}/run`, {
-    apiKey,
+  const submitted = await runpodRequest(`${account.endpoint}/run`, {
+    apiKey: account.apiKey,
     fetchImpl,
     method: "POST",
     body: { input },
@@ -458,7 +606,10 @@ export async function startRunpodJob(env, input, deps = {}) {
   });
   const first = submitted.json || {};
   if (isTerminalFailure(first.status)) {
-    throw new Error(explainRunpodFailure({ httpStatus: submitted.response.status, json: first, text: submitted.text }));
+    const error = new Error(explainRunpodFailure({ httpStatus: submitted.response.status, json: first, text: submitted.text }));
+    error.statusCode = submitted.response.status;
+    if (isRunpodCreditError(error) || CREDIT_RE.test(`${first.status || ""} ${submitted.text || ""}`)) error.credit = true;
+    throw error;
   }
   if (!isJobId(first.id)) {
     throw new Error(
@@ -469,14 +620,34 @@ export async function startRunpodJob(env, input, deps = {}) {
       })
     );
   }
-  return first;
+  return { ...first, id: tagRunpodJobId(account.slot, first.id, tag) };
+}
+
+export async function startRunpodJob(env, input, deps = {}) {
+  const accounts = listRunpodAccounts(env);
+  if (!accounts.length) throw missingRunpodError();
+  if (accounts.length === 1) return submitToAccount(accounts[0], input, deps, false);
+  const ranked = await rankAccountsByBalance(accounts, deps);
+  try {
+    return await submitToAccount(ranked[0], input, deps, true);
+  } catch (error) {
+    if (!ranked[1] || !isRunpodCreditError(error)) throw error;
+    return submitToAccount(ranked[1], input, deps, true);
+  }
 }
 
 export async function fetchRunpodJob(env, jobId, deps = {}) {
-  const { endpoint, apiKey } = requireRunpod(env);
+  const resolved = resolveRunpodAccount(env, jobId);
+  if (!resolved.account) {
+    const error = resolved.missingSlot
+      ? new Error(`That job was started on Runpod ${resolved.missingSlot}, which is not configured on this site.`)
+      : missingRunpodError();
+    error.statusCode = resolved.missingSlot ? 409 : 500;
+    throw error;
+  }
   const fetchImpl = deps.fetch || fetch;
-  const polled = await runpodRequest(`${endpoint}/status/${encodeURIComponent(jobId)}`, {
-    apiKey,
+  const polled = await runpodRequest(`${resolved.account.endpoint}/status/${encodeURIComponent(resolved.rawId)}`, {
+    apiKey: resolved.account.apiKey,
     fetchImpl,
     timeoutMs: deps.timeoutMs ?? 30000,
   });

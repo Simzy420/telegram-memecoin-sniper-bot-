@@ -2,6 +2,7 @@
 // original Swapr production hosts (wan22-templates / swapr-casey) at this build.
 window.CONFIG = {
   PRODUCT: "swapr-mix",
+  VERSION: "1.1.0",
   HF_SPACE: "https://simzy-wan-2-2-templates.hf.space",
   CATALOG_URL:
     "https://huggingface.co/datasets/Simzy/wan22-template-clips/resolve/main/templates/catalog.json",
