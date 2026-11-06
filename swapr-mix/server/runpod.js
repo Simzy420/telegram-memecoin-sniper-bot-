@@ -35,8 +35,10 @@ const RUNPOD_DEFAULTS = {
   width: 480,
   height: 832,
   fps: 16,
+  // The worker's face LoRA is already strength 1.0. CFG 1 keeps that LoRA in
+  // charge. 8 steps adds detail on the lightx2v stack without a long run.
   cfg: 1,
-  steps: 5,
+  steps: 8,
   mode: "replace",
 };
 
@@ -518,6 +520,8 @@ export function describeRunpodJob(jobId, body) {
       };
     }
     const url = `/api/result?id=${encodeURIComponent(jobId)}`;
+    const executionTimeMs = Number(body?.executionTime);
+    const delayTimeMs = Number(body?.delayTime);
     return {
       job_id: jobId,
       phase: "done",
@@ -526,6 +530,8 @@ export function describeRunpodJob(jobId, body) {
       status: "Done.",
       session_id: null,
       state: null,
+      executionTimeMs: Number.isFinite(executionTimeMs) && executionTimeMs >= 0 ? executionTimeMs : null,
+      delayTimeMs: Number.isFinite(delayTimeMs) && delayTimeMs >= 0 ? delayTimeMs : null,
     };
   }
   if (isTerminalFailure(status)) {
